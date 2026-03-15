@@ -1,0 +1,43 @@
+stages:
+  - lint
+  - security
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  PYTHON_VERSION: "3.12"
+
+default:
+  image: python:${PYTHON_VERSION}-slim
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-pip"
+    paths:
+      - .pip-cache/
+
+# ── Lint ──────────────────────────────────────────────────────────────
+
+ruff:
+  stage: lint
+  before_script:
+    - pip install ruff
+  script:
+    - ruff check fastcode/ api.py mcp_server.py main.py
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ── Security ─────────────────────────────────────────────────────────
+
+security:
+  stage: security
+  before_script:
+    - pip install bandit pip-audit
+  script:
+    - bandit -r fastcode/ api.py mcp_server.py -ll --format json -o bandit-report.json
+    - pip-audit -r requirements.txt --strict --desc
+  artifacts:
+    paths:
+      - bandit-report.json
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

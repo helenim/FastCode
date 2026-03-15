@@ -533,7 +533,7 @@ class QueryProcessor:
             else:
                 return {}
 
-            print(f"LLM response of _enhance_with_llm: {response}")
+            self.logger.debug(f"LLM response of _enhance_with_llm: {response}")
             
             # Parse LLM response
             enhancements = self._parse_llm_response(response, intent)

@@ -1,5 +1,7 @@
 stages:
   - lint
+  - test
+  - type-check
   - security
 
 variables:
@@ -21,6 +23,31 @@ ruff:
     - pip install ruff
   script:
     - ruff check fastcode/ api.py mcp_server.py main.py
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ── Test ──────────────────────────────────────────────────────────────
+
+pytest:
+  stage: test
+  before_script:
+    - pip install pytest pytest-asyncio pytest-cov -r requirements.txt
+  script:
+    - python -m pytest tests/ -v --tb=short
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ── Type Check ───────────────────────────────────────────────────────
+
+mypy:
+  stage: type-check
+  before_script:
+    - pip install mypy -r requirements.txt
+  script:
+    - mypy fastcode/ api.py mcp_server.py main.py --ignore-missing-imports
+  allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

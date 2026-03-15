@@ -336,7 +336,7 @@ class VectorStore:
                 distance = float(np.linalg.norm(query_vector - embedding))
                 similarity = 1.0 / (1.0 + distance)
             
-            print(f"similarity: {similarity}, repo_name: {repo_name}")
+            self.logger.debug(f"similarity: {similarity}, repo_name: {repo_name}")
             
             # Apply minimum score filter
             if min_score is not None and similarity < min_score:

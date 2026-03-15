@@ -30,8 +30,13 @@ WORKDIR /app/bridge
 RUN npm install && npm run build
 WORKDIR /app
 
-# Create config directory
-RUN mkdir -p /root/.nanobot
+# Create non-root user and config directory
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser && \
+    mkdir -p /home/appuser/.nanobot && \
+    chown -R appuser:appuser /app /home/appuser/.nanobot
+
+USER appuser
 
 # Gateway default port
 EXPOSE 18790

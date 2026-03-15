@@ -94,7 +94,7 @@ class AgentTools:
                 if not is_dir:
                     try:
                         item_info["size"] = os.path.getsize(item_path)
-                    except:
+                    except Exception:
                         item_info["size"] = 0
                 
                 result["contents"].append(item_info)

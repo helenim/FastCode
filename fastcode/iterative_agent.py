@@ -2832,7 +2832,7 @@ If continuing (confidence < {self.confidence_threshold} and budget available):
                         subset = json_str[start:end]
                         if subset.count('{') == subset.count('}'):
                             return json.loads(subset)
-                    except:
+                    except Exception:
                         continue
         except Exception as e5:
             self.logger.debug(f"Incremental parse failed: {e5}")

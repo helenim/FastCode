@@ -586,7 +586,7 @@ class CodeGraphBuilder:
                     stats[name]["avg_degree"] = sum(
                         d for _, d in graph.degree()
                     ) / graph.number_of_nodes()
-                except:
+                except Exception:
                     stats[name]["avg_degree"] = 0
         
         return stats

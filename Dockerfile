@@ -20,13 +20,16 @@ RUN pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
 # so that code changes don't invalidate this ~470MB cached layer
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
 
-# Create necessary directories
-RUN mkdir -p /app/repos /app/data /app/logs
+# Create non-root user and necessary directories
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser && \
+    mkdir -p /app/repos /app/data /app/logs && \
+    chown -R appuser:appuser /app
 
 # Copy application code (changes here won't re-download the model)
-COPY fastcode/ fastcode/
-COPY api.py ./
-COPY config/ config/
+COPY --chown=appuser:appuser fastcode/ fastcode/
+COPY --chown=appuser:appuser api.py ./
+COPY --chown=appuser:appuser config/ config/
 
 # Default port for FastCode API
 EXPOSE 8001
@@ -35,4 +38,5 @@ EXPOSE 8001
 ENV PYTHONUNBUFFERED=1
 ENV TOKENIZERS_PARALLELISM=false
 
+USER appuser
 CMD ["python", "api.py", "--host", "0.0.0.0", "--port", "8001"]

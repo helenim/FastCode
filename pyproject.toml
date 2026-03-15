@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ebridge-fastcode"
+version = "0.1.0"
+description = "Code intelligence service — AST indexing, hybrid search, and MCP server"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+
+# Runtime dependencies are managed via requirements.txt for now.
+# This pyproject.toml enables pytest discovery by the workspace Makefile.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.8.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fastcode"]
+
+[tool.ruff]
+extend = "../config/ruff-base.toml"
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+markers = [
+    "integration: tests that require running infrastructure (vector store, LLM)",
+    "slow: tests that take significant time to run",
+    "llm: tests that require LLM API keys",
+]
+
+[tool.coverage.run]
+source = ["fastcode"]
+
+[tool.coverage.report]
+fail_under = 30

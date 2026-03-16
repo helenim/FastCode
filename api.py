@@ -12,7 +12,7 @@ if platform.system() == 'Darwin':
     os.environ['OPENBLAS_NUM_THREADS'] = '1'
     os.environ['MKL_NUM_THREADS'] = '1'
 
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -27,8 +27,34 @@ import shutil
 import uuid
 import json as json_module
 import asyncio
+import threading
 
 from fastcode import FastCode
+
+# --- Keycloak JWT authentication ---
+try:
+    from ebridge_auth import KeycloakAuth, TokenUser
+
+    _auth = KeycloakAuth(
+        server_url=os.getenv("KEYCLOAK_URL", "http://keycloak:8080"),
+        realm=os.getenv("KEYCLOAK_REALM", "ebridge"),
+        client_id=os.getenv("KEYCLOAK_CLIENT_ID", "ebridge-fastcode"),
+    )
+    _get_user = _auth.get_current_user()
+except ImportError:
+    _get_user = None  # type: ignore[assignment]
+    TokenUser = None  # type: ignore[assignment, misc]
+
+# Build list of dependencies for authenticated routes — fail-closed when auth unavailable
+if _get_user is not None:
+    _auth_dependencies = [Depends(_get_user)]
+else:
+    from fastapi import HTTPException as _HTTPException
+
+    async def _reject_no_auth():
+        raise _HTTPException(status_code=503, detail="Authentication service unavailable")
+
+    _auth_dependencies = [Depends(_reject_no_auth)]
 
 
 # Pydantic models
@@ -104,6 +130,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Security headers middleware
+try:
+    from ebridge_auth.security_headers import SecurityHeadersMiddleware
+    app.add_middleware(SecurityHeadersMiddleware)
+except ImportError:
+    pass
+
 # CORS middleware
 _cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 app.add_middleware(
@@ -116,6 +149,7 @@ app.add_middleware(
 
 # Global FastCode instance
 fastcode_instance: Optional[FastCode] = None
+_fastcode_lock = threading.Lock()
 
 # Setup logging
 log_dir = Path("./logs")
@@ -133,16 +167,18 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_fastcode_initialized():
-    """Ensure FastCode is initialized (lazy initialization)"""
+    """Ensure FastCode is initialized (lazy initialization, thread-safe)"""
     global fastcode_instance
     if fastcode_instance is None:
-        logger.info("Initializing FastCode system (lazy initialization)")
-        fastcode_instance = FastCode()
+        with _fastcode_lock:
+            if fastcode_instance is None:  # double-check
+                logger.info("Initializing FastCode system (lazy initialization)")
+                fastcode_instance = FastCode()
     return fastcode_instance
 
 
 
-@app.get("/")
+@app.get("/", dependencies=_auth_dependencies)
 async def root():
     """Root endpoint"""
     return {
@@ -172,7 +208,7 @@ async def health_check():
     }
 
 
-@app.get("/status", response_model=StatusResponse)
+@app.get("/status", response_model=StatusResponse, dependencies=_auth_dependencies)
 async def get_status(full_scan: bool = False):
     """
     Get system status
@@ -195,7 +231,7 @@ async def get_status(full_scan: bool = False):
     )
 
 
-@app.get("/repositories")
+@app.get("/repositories", dependencies=_auth_dependencies)
 async def list_repositories(full_scan: bool = False):
     """
     List available (indexed on disk) and loaded repositories
@@ -219,7 +255,7 @@ async def list_repositories(full_scan: bool = False):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/load")
+@app.post("/load", dependencies=_auth_dependencies)
 async def load_repository(request: LoadRepositoryRequest):
     """Load a repository"""
     fastcode = _ensure_fastcode_initialized()
@@ -239,7 +275,7 @@ async def load_repository(request: LoadRepositoryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/index")
+@app.post("/index", dependencies=_auth_dependencies)
 async def index_repository(force: bool = False):
     """Index the loaded repository"""
     fastcode = _ensure_fastcode_initialized()
@@ -264,7 +300,7 @@ async def index_repository(force: bool = False):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/load-and-index")
+@app.post("/load-and-index", dependencies=_auth_dependencies)
 async def load_and_index(request: LoadRepositoryRequest, force: bool = False):
     """Load and index repository in one call"""
     fastcode = _ensure_fastcode_initialized()
@@ -289,7 +325,7 @@ async def load_and_index(request: LoadRepositoryRequest, force: bool = False):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/load-repositories")
+@app.post("/load-repositories", dependencies=_auth_dependencies)
 async def load_repositories(request: LoadRepositoriesRequest):
     """Load existing indexed repositories from cache"""
     fastcode = _ensure_fastcode_initialized()
@@ -316,7 +352,7 @@ async def load_repositories(request: LoadRepositoriesRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/index-multiple")
+@app.post("/index-multiple", dependencies=_auth_dependencies)
 async def index_multiple(request: IndexMultipleRequest):
     """Load and index multiple repositories"""
     fastcode = _ensure_fastcode_initialized()
@@ -340,7 +376,7 @@ async def index_multiple(request: IndexMultipleRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/upload-zip")
+@app.post("/upload-zip", dependencies=_auth_dependencies)
 async def upload_repository_zip(file: UploadFile = File(...)):
     """Upload and extract repository ZIP file"""
     fastcode = _ensure_fastcode_initialized()
@@ -419,7 +455,7 @@ async def upload_repository_zip(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/upload-and-index")
+@app.post("/upload-and-index", dependencies=_auth_dependencies)
 async def upload_and_index(file: UploadFile = File(...), force: bool = False):
     """Upload ZIP and index in one call"""
     fastcode = _ensure_fastcode_initialized()
@@ -446,7 +482,7 @@ async def upload_and_index(file: UploadFile = File(...), force: bool = False):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/query", response_model=QueryResponse)
+@app.post("/query", response_model=QueryResponse, dependencies=_auth_dependencies)
 async def query_repository(request: QueryRequest):
     """Query the repository"""
     fastcode = _ensure_fastcode_initialized()
@@ -497,7 +533,7 @@ async def query_repository(request: QueryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/query-stream")
+@app.post("/query-stream", dependencies=_auth_dependencies)
 async def query_repository_stream(request: QueryRequest):
     """Query the repository with streaming response (SSE)"""
     fastcode = _ensure_fastcode_initialized()
@@ -572,7 +608,7 @@ async def query_repository_stream(request: QueryRequest):
     )
 
 
-@app.get("/summary")
+@app.get("/summary", dependencies=_auth_dependencies)
 async def get_repository_summary():
     """Get repository summary"""
     fastcode = _ensure_fastcode_initialized()
@@ -596,7 +632,7 @@ async def get_repository_summary():
     return summary_payload
 
 
-@app.post("/new-session", response_model=NewSessionResponse)
+@app.post("/new-session", response_model=NewSessionResponse, dependencies=_auth_dependencies)
 async def new_session(clear_session_id: Optional[str] = None):
     """Start a new conversation session"""
     fastcode = _ensure_fastcode_initialized()
@@ -608,7 +644,7 @@ async def new_session(clear_session_id: Optional[str] = None):
     return NewSessionResponse(session_id=session_id)
 
 
-@app.get("/sessions")
+@app.get("/sessions", dependencies=_auth_dependencies)
 async def list_sessions():
     """List all dialogue sessions with titles (sorted by last update time)"""
     fastcode = _ensure_fastcode_initialized()
@@ -632,7 +668,7 @@ async def list_sessions():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/session/{session_id}")
+@app.get("/session/{session_id}", dependencies=_auth_dependencies)
 async def get_session(session_id: str):
     """Get full dialogue history for a session"""
     fastcode = _ensure_fastcode_initialized()
@@ -645,7 +681,7 @@ async def get_session(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.delete("/session/{session_id}")
+@app.delete("/session/{session_id}", dependencies=_auth_dependencies)
 async def delete_session(session_id: str):
     """Delete a single dialogue session"""
     fastcode = _ensure_fastcode_initialized()
@@ -670,7 +706,7 @@ async def delete_session(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/delete-repos")
+@app.post("/delete-repos", dependencies=_auth_dependencies)
 async def delete_repositories(request: DeleteReposRequest):
     """Delete one or more repositories and all associated data"""
     fastcode = _ensure_fastcode_initialized()
@@ -701,7 +737,7 @@ async def delete_repositories(request: DeleteReposRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/clear-cache")
+@app.post("/clear-cache", dependencies=_auth_dependencies)
 async def clear_cache():
     """Clear cache"""
     fastcode = _ensure_fastcode_initialized()
@@ -714,7 +750,7 @@ async def clear_cache():
         return {"status": "failed", "message": "Failed to clear cache or cache disabled"}
 
 
-@app.get("/cache-stats")
+@app.get("/cache-stats", dependencies=_auth_dependencies)
 async def get_cache_stats():
     """Get cache statistics"""
     fastcode = _ensure_fastcode_initialized()
@@ -723,7 +759,7 @@ async def get_cache_stats():
     return stats
 
 
-@app.post("/refresh-index-cache")
+@app.post("/refresh-index-cache", dependencies=_auth_dependencies)
 async def refresh_index_cache():
     """Force refresh the index scan cache"""
     fastcode = _ensure_fastcode_initialized()
@@ -742,7 +778,7 @@ async def refresh_index_cache():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.delete("/repository")
+@app.delete("/repository", dependencies=_auth_dependencies)
 async def unload_repository():
     """Unload current repository"""
     global fastcode_instance

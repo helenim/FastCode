@@ -47,7 +47,6 @@ mypy:
     - pip install mypy -r requirements.txt
   script:
     - mypy fastcode/ api.py mcp_server.py main.py --ignore-missing-imports
-  allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

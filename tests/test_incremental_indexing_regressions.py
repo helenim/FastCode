@@ -504,6 +504,44 @@ def test_ensure_repos_ready_falls_back_to_full_reindex_when_manifest_is_missing(
     assert not fc.index_repository.called
 
 
+def test_ensure_repos_ready_falls_back_to_full_reindex_on_embedding_mismatch(tmp_path):
+    ensure_repos_ready = _load_functions(
+        MCP_SERVER,
+        ["_ensure_repos_ready"],
+        global_ns={"os": os, "logger": _null_logger()},
+    )[0]
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    fc = SimpleNamespace(
+        _infer_is_url=lambda source: False,
+        incremental_reindex=Mock(
+            return_value={"status": "embedding_dimension_mismatch", "changes": 3}
+        ),
+        load_repository=Mock(),
+        index_repository=Mock(),
+        repo_indexed=True,
+        loaded_repositories={},
+    )
+    full_reindex = Mock(return_value={"status": "success", "count": 9})
+
+    ensure_repos_ready.__globals__.update(
+        {
+            "_get_fastcode": lambda: fc,
+            "_apply_forced_env_excludes": lambda fc: None,
+            "_repo_name_from_source": lambda source, is_url: "repo",
+            "_is_repo_indexed": lambda repo_name: True,
+            "_run_full_reindex": full_reindex,
+            "_invalidate_loaded_state": lambda fc: None,
+        }
+    )
+
+    ensure_repos_ready([str(repo_dir)])
+
+    assert full_reindex.called
+
+
 def test_lookup_tools_do_not_disable_incremental_refresh():
     search_symbol, get_file_summary, get_call_chain = _load_functions(
         MCP_SERVER,

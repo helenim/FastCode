@@ -190,11 +190,17 @@ def _ensure_repos_ready(repos: List[str], allow_incremental: bool = True, ctx=No
                     try:
                         result = fc.incremental_reindex(name, repo_path=abs_path)
                         status = (result or {}).get("status")
-                        if result and result.get("changes", 0) > 0:
+                        if status in {
+                            "no_manifest",
+                            "no_metadata",
+                            "embedding_mismatch",
+                            "embedding_dimension_mismatch",
+                            "full_reindex_required",
+                        }:
+                            force_full_reindex = True
+                        elif result and result.get("changes", 0) > 0:
                             logger.info(f"Incremental update for '{name}': {result}")
                             _invalidate_loaded_state(fc)
-                        elif status in {"no_manifest", "no_metadata", "embedding_mismatch", "full_reindex_required"}:
-                            force_full_reindex = True
                     except Exception as e:
                         logger.warning(f"Incremental reindex failed for '{name}': {e}")
                         force_full_reindex = True

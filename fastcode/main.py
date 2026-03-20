@@ -1488,7 +1488,7 @@ class FastCode:
                 current_dimension,
             )
             return {
-                "status": "embedding_dimension_mismatch",
+                "status": "embedding_mismatch",
                 "changes": total_changes,
                 "persisted_dimension": persisted_dimension,
                 "current_dimension": current_dimension,
@@ -1563,7 +1563,7 @@ class FastCode:
                         tuple(embedding_array.shape),
                     )
                     return {
-                        "status": "embedding_dimension_mismatch",
+                        "status": "embedding_mismatch",
                         "changes": total_changes,
                         "persisted_dimension": persisted_dimension,
                         "current_dimension": current_dimension,

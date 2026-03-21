@@ -1,8 +1,11 @@
 """Configuration loading utilities."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from nanobot.config.schema import Config
 
@@ -37,8 +40,11 @@ def load_config(config_path: Path | None = None) -> Config:
             data = _migrate_config(data)
             return Config.model_validate(convert_keys(data))
         except (json.JSONDecodeError, ValueError) as e:
-            print(f"Warning: Failed to load config from {path}: {e}")
-            print("Using default configuration.")
+            logger.warning(
+                "Failed to load config from %s: %s — using default configuration",
+                path,
+                e,
+            )
     
     return Config()
 

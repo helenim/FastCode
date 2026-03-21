@@ -23,7 +23,9 @@ ruff:
   before_script:
     - pip install ruff
   script:
-    - ruff check fastcode/ api.py mcp_server.py main.py
+    # Full rules on first-party code; F/B/S only on vendored nanobot (full ruff on nanobot is ~4k+ style issues).
+    - ruff check fastcode/ api.py mcp_server.py main.py web_app.py
+    - ruff check nanobot/nanobot/ --select F,B,S
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -55,7 +57,8 @@ mypy:
   before_script:
     - pip install mypy -r requirements.txt
   script:
-    - mypy fastcode/ api.py mcp_server.py main.py --ignore-missing-imports
+    - mypy fastcode/ api.py mcp_server.py main.py web_app.py --ignore-missing-imports
+    - mypy nanobot/nanobot/agent/tools/shell.py --ignore-missing-imports
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -68,7 +71,8 @@ security:
   before_script:
     - pip install bandit pip-audit
   script:
-    - bandit -r fastcode/ api.py mcp_server.py -ll --format json -o bandit-report.json
+    # Full nanobot tree adds many informational findings; gate the security-hardened exec tool explicitly.
+    - bandit -c bandit.yaml -r fastcode/ api.py mcp_server.py main.py web_app.py nanobot/nanobot/agent/tools/shell.py -ll --format json -o bandit-report.json
     - pip-audit -r requirements.txt --strict --desc
   artifacts:
     paths:

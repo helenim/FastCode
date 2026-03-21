@@ -405,7 +405,7 @@ def gateway(
     if cron_status["jobs"] > 0:
         console.print(f"[green]✓[/green] Cron: {cron_status['jobs']} scheduled jobs")
     
-    console.print(f"[green]✓[/green] Heartbeat: every 30m")
+    console.print("[green]✓[/green] Heartbeat: every 30m")
     
     async def run():
         try:
@@ -595,8 +595,9 @@ def _get_bridge_dir() -> Path:
     if (user_bridge / "dist" / "index.js").exists():
         return user_bridge
     
-    # Check for npm
-    if not shutil.which("npm"):
+    # Check for npm (use absolute path for bandit S607)
+    npm = shutil.which("npm")
+    if not npm:
         console.print("[red]npm not found. Please install Node.js >= 18.[/red]")
         raise typer.Exit(1)
     
@@ -626,33 +627,39 @@ def _get_bridge_dir() -> Path:
     # Install and build
     try:
         console.print("  Installing dependencies...")
-        subprocess.run(["npm", "install"], cwd=user_bridge, check=True, capture_output=True)
-        
+        subprocess.run([npm, "install"], cwd=user_bridge, check=True, capture_output=True)
+
         console.print("  Building...")
-        subprocess.run(["npm", "run", "build"], cwd=user_bridge, check=True, capture_output=True)
+        subprocess.run([npm, "run", "build"], cwd=user_bridge, check=True, capture_output=True)
         
         console.print("[green]✓[/green] Bridge ready\n")
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Build failed: {e}[/red]")
         if e.stderr:
             console.print(f"[dim]{e.stderr.decode()[:500]}[/dim]")
-        raise typer.Exit(1)
-    
+        raise typer.Exit(1) from None
+
     return user_bridge
 
 
 @channels_app.command("login")
 def channels_login():
     """Link device via QR code."""
+    import shutil
     import subprocess
-    
+
     bridge_dir = _get_bridge_dir()
-    
+
     console.print(f"{__logo__} Starting bridge...")
     console.print("Scan the QR code to connect.\n")
-    
+
+    npm = shutil.which("npm")
+    if not npm:
+        console.print("[red]npm not found. Please install Node.js.[/red]")
+        raise typer.Exit(1)
+
     try:
-        subprocess.run(["npm", "start"], cwd=bridge_dir, check=True)
+        subprocess.run([npm, "start"], cwd=bridge_dir, check=True)
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Bridge failed: {e}[/red]")
     except FileNotFoundError:
@@ -811,7 +818,7 @@ def cron_run(
         return await service.run_job(job_id, force=force)
     
     if asyncio.run(run()):
-        console.print(f"[green]✓[/green] Job executed")
+        console.print("[green]✓[/green] Job executed")
     else:
         console.print(f"[red]Failed to run job {job_id}[/red]")
 

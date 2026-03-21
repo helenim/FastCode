@@ -8,9 +8,9 @@
 
 | **⚡ High Performance** | **💰 Cost Efficient** | **🚀 Fast & Scalable** |
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-Proprietary-lightgrey.svg)](LICENSE)
+[![Lint: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 <p>
   <a href="https://github.com/HKUDS/FastCode/issues/1"><img src="https://img.shields.io/badge/💬WeChat-Group-07c160?style=for-the-badge&logo=wechat&logoColor=white&labelColor=1a1a2e"></a>
   <a href="https://github.com/HKUDS/FastCode/issues/2"><img src="https://img.shields.io/badge/💬Feishu-Group-3370ff?style=for-the-badge&logo=bytedance&logoColor=white&labelColor=1a1a2e"></a>

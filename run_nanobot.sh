@@ -72,10 +72,13 @@ get_container_state() {
 
 # ============ 检测 Docker 镜像是否存在 ============
 images_exist() {
-    local fc_img nb_img
-    fc_img=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -c "fastcode" || true)
-    nb_img=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -c "nanobot" || true)
-    [ "$fc_img" -gt 0 ] && [ "$nb_img" -gt 0 ]
+    local fc_img nb_img out
+    if ! out=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null); then
+        return 1
+    fi
+    fc_img=$(grep -c "fastcode" <<<"$out" || true)
+    nb_img=$(grep -c "nanobot" <<<"$out" || true)
+    [ "${fc_img:-0}" -gt 0 ] && [ "${nb_img:-0}" -gt 0 ]
 }
 
 # ============ 自动配置 nanobot_config.json ============

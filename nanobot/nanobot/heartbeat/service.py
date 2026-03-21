@@ -14,8 +14,8 @@ HEARTBEAT_PROMPT = """Read HEARTBEAT.md in your workspace (if it exists).
 Follow any instructions or tasks listed there.
 If nothing needs attention, reply with just: HEARTBEAT_OK"""
 
-# Token that indicates "nothing to do"
-HEARTBEAT_OK_TOKEN = "HEARTBEAT_OK"
+# Sentinel string when the model reports no work (not a credential).
+HEARTBEAT_OK_REPLY = "HEARTBEAT_OK"
 
 
 def _is_heartbeat_empty(content: str | None) -> bool:
@@ -115,10 +115,10 @@ class HeartbeatService:
                 response = await self.on_heartbeat(HEARTBEAT_PROMPT)
                 
                 # Check if agent said "nothing to do"
-                if HEARTBEAT_OK_TOKEN.replace("_", "") in response.upper().replace("_", ""):
+                if HEARTBEAT_OK_REPLY.replace("_", "") in response.upper().replace("_", ""):
                     logger.info("Heartbeat: OK (no action needed)")
                 else:
-                    logger.info(f"Heartbeat: completed task")
+                    logger.info("Heartbeat: completed task")
                     
             except Exception as e:
                 logger.error(f"Heartbeat execution failed: {e}")

@@ -1,4 +1,3 @@
-from typing import Optional
 from fastcode.global_index_builder import GlobalIndexBuilder
 
 
@@ -20,7 +19,13 @@ class ModuleResolver:
         """
         self.index = index
 
-    def resolve_import(self, current_module_path: str, import_name: str, level: int, is_package: bool = False) -> Optional[str]:
+    def resolve_import(
+        self,
+        current_module_path: str,
+        import_name: str,
+        level: int,
+        is_package: bool = False,
+    ) -> str | None:
         """
         Resolve import to target file ID.
 
@@ -33,19 +38,27 @@ class ModuleResolver:
         """
         if level > 0:
             # Pass the is_package flag to the relative import handler
-            result = self._resolve_relative_import(current_module_path, import_name, level, is_package)
+            result = self._resolve_relative_import(
+                current_module_path, import_name, level, is_package
+            )
             return result
         else:
             result = self._resolve_absolute_import(import_name)
             return result
 
-    def _resolve_relative_import(self, current_module_path: str, import_name: str, level: int, is_package: bool = False) -> Optional[str]:
+    def _resolve_relative_import(
+        self,
+        current_module_path: str,
+        import_name: str,
+        level: int,
+        is_package: bool = False,
+    ) -> str | None:
         """
         Resolve relative import by navigating up the module hierarchy.
         """
 
         # Split current module path into components
-        current_parts = current_module_path.split('.')
+        current_parts = current_module_path.split(".")
 
         # Determine how many levels to strip
         if is_package:
@@ -68,13 +81,12 @@ class ModuleResolver:
         else:
             parent_parts = current_parts
 
-
         # Build target module path
         if import_name:
-            target_parts = parent_parts + [import_name]
-            target_module_path = '.'.join(target_parts)
+            target_parts = [*parent_parts, import_name]
+            target_module_path = ".".join(target_parts)
         else:
-            target_module_path = '.'.join(parent_parts) if parent_parts else None
+            target_module_path = ".".join(parent_parts) if parent_parts else None
 
         # Lookup in module_map
         if target_module_path and target_module_path in self.index.module_map:
@@ -83,7 +95,7 @@ class ModuleResolver:
 
         return None
 
-    def _resolve_absolute_import(self, import_name: str) -> Optional[str]:
+    def _resolve_absolute_import(self, import_name: str) -> str | None:
         """
         Resolve absolute import by direct lookup in module_map.
 

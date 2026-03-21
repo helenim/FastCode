@@ -6,7 +6,8 @@ Given a code symbol name, find its definition ID using local and imported resolu
 """
 
 import logging
-from typing import Optional, Dict, List, Any
+from typing import Any
+
 from .global_index_builder import GlobalIndexBuilder
 from .module_resolver import ModuleResolver
 
@@ -20,7 +21,9 @@ class SymbolResolver:
     2. Imported: Check imports and resolve to source file definitions
     """
 
-    def __init__(self, global_index: GlobalIndexBuilder, module_resolver: ModuleResolver):
+    def __init__(
+        self, global_index: GlobalIndexBuilder, module_resolver: ModuleResolver
+    ):
         """
         Initialize SymbolResolver with dependency injection
 
@@ -32,7 +35,9 @@ class SymbolResolver:
         self.module_resolver = module_resolver
         self.logger = logging.getLogger(__name__)
 
-    def resolve_symbol(self, symbol_name: str, current_file_id: str, imports: List[Dict[str, Any]]) -> Optional[str]:
+    def resolve_symbol(
+        self, symbol_name: str, current_file_id: str, imports: list[dict[str, Any]]
+    ) -> str | None:
         """
         Resolve a symbol name to its definition ID
 
@@ -60,13 +65,15 @@ class SymbolResolver:
         # Strategy 2: Imported resolution - check imports
         imported_result = self._resolve_imported(symbol_name, imports, current_file_id)
         if imported_result:
-            self.logger.debug(f"Resolved '{symbol_name}' via import to {imported_result}")
+            self.logger.debug(
+                f"Resolved '{symbol_name}' via import to {imported_result}"
+            )
             return imported_result
 
         self.logger.debug(f"Could not resolve '{symbol_name}'")
         return None
 
-    def _resolve_local(self, symbol_name: str, current_file_id: str) -> Optional[str]:
+    def _resolve_local(self, symbol_name: str, current_file_id: str) -> str | None:
         """
         Resolve symbol locally in current file
 
@@ -83,10 +90,16 @@ class SymbolResolver:
             return None
 
         # Check if symbol is exported by current module
-        return self.global_index.get_exported_symbol_id(current_module_path, symbol_name)
+        return self.global_index.get_exported_symbol_id(
+            current_module_path, symbol_name
+        )
 
-    def _resolve_imported(self, symbol_name: str, imports: List[Dict[str, Any]],
-                        current_file_id: Optional[str] = None) -> Optional[str]:
+    def _resolve_imported(
+        self,
+        symbol_name: str,
+        imports: list[dict[str, Any]],
+        current_file_id: str | None = None,
+    ) -> str | None:
         """
         Resolve symbol through imports
 
@@ -103,54 +116,72 @@ class SymbolResolver:
             # Handle different import patterns
             if self._matches_import(symbol_name, import_info):
                 # Resolve the module to get target file ID
-                current_module_path = self._get_current_module_path_for_imports(current_file_id)
+                current_module_path = self._get_current_module_path_for_imports(
+                    current_file_id
+                )
                 target_file_id = self.module_resolver.resolve_import(
                     current_module_path=current_module_path or "",
-                    import_name=import_info.get('module', ''),
-                    level=import_info.get('level', 0)
+                    import_name=import_info.get("module", ""),
+                    level=import_info.get("level", 0),
                 )
 
                 if target_file_id:
-                    target_module_path = self._get_module_path_by_file_id(target_file_id)
+                    target_module_path = self._get_module_path_by_file_id(
+                        target_file_id
+                    )
                     if target_module_path:
                         # For "from X import Y" pattern
-                        if import_info.get('names'):
-                            imported_names = import_info['names']
-                            
+                        if import_info.get("names"):
+                            imported_names = import_info["names"]
+
                             # 1. Exact match (e.g. import func)
                             if symbol_name in imported_names:
-                                return self.global_index.get_exported_symbol_id(target_module_path, symbol_name)
+                                return self.global_index.get_exported_symbol_id(
+                                    target_module_path, symbol_name
+                                )
 
                             # 2. Alias match
-                            alias = import_info.get('alias')
+                            alias = import_info.get("alias")
                             if alias and symbol_name == alias:
-                                original_name = imported_names[0] if imported_names else symbol_name
-                                return self.global_index.get_exported_symbol_id(target_module_path, original_name)
-                            
+                                original_name = (
+                                    imported_names[0] if imported_names else symbol_name
+                                )
+                                return self.global_index.get_exported_symbol_id(
+                                    target_module_path, original_name
+                                )
+
                             # --- [CRITICAL FIX] Member match (Class.Method) ---
-                            # Check if we are looking for "RepositoryLoader.load_from_url" 
+                            # Check if we are looking for "RepositoryLoader.load_from_url"
                             # and we imported "RepositoryLoader"
                             for name in imported_names:
-                                if symbol_name.startswith(name + '.'):
-                                    # Look up the full symbol "RepositoryLoader.load_from_url" 
+                                if symbol_name.startswith(name + "."):
+                                    # Look up the full symbol "RepositoryLoader.load_from_url"
                                     # in the target module (fastcode.loader)
-                                    return self.global_index.get_exported_symbol_id(target_module_path, symbol_name)
+                                    return self.global_index.get_exported_symbol_id(
+                                        target_module_path, symbol_name
+                                    )
                             # --------------------------------------------------
 
                         # For "import X" pattern (remains same)
-                        elif import_info.get('module') and symbol_name.startswith(import_info['module'] + '.'):
-                            actual_symbol = symbol_name[len(import_info['module']) + 1:]
-                            return self.global_index.get_exported_symbol_id(target_module_path, actual_symbol)
+                        elif import_info.get("module") and symbol_name.startswith(
+                            import_info["module"] + "."
+                        ):
+                            actual_symbol = symbol_name[
+                                len(import_info["module"]) + 1 :
+                            ]
+                            return self.global_index.get_exported_symbol_id(
+                                target_module_path, actual_symbol
+                            )
 
         return None
 
-    def _matches_import(self, symbol_name: str, import_info: Dict[str, Any]) -> bool:
+    def _matches_import(self, symbol_name: str, import_info: dict[str, Any]) -> bool:
         """
         Check if symbol name matches this import statement
         """
-        imported_names = import_info.get('names', [])
-        alias = import_info.get('alias')
-        module_name = import_info.get('module', '')
+        imported_names = import_info.get("names", [])
+        alias = import_info.get("alias")
+        module_name = import_info.get("module", "")
 
         # Direct name match: "from utils import helper" -> use "helper"
         if symbol_name in imported_names:
@@ -161,19 +192,14 @@ class SymbolResolver:
             return True
 
         # Module prefix match: "import utils" -> use "utils.helper"
-        if module_name and symbol_name.startswith(module_name + '.'):
+        if module_name and symbol_name.startswith(module_name + "."):
             return True
-            
+
         # --- [CRITICAL FIX] Check if symbol is a method of an imported class ---
-        imported_names = import_info.get('names', [])
-        for name in imported_names:
-            if symbol_name.startswith(name + '.'):
-                return True
-        # -----------------------------------------------------------------------
+        imported_names = import_info.get("names", [])
+        return any(symbol_name.startswith(name + ".") for name in imported_names)
 
-        return False
-
-    def _get_module_path_by_file_id(self, file_id: str) -> Optional[str]:
+    def _get_module_path_by_file_id(self, file_id: str) -> str | None:
         """
         Get module path from file_id using reverse lookup
 
@@ -189,7 +215,9 @@ class SymbolResolver:
                 return module_path
         return None
 
-    def _get_current_module_path_for_imports(self, current_file_id: Optional[str] = None) -> str:
+    def _get_current_module_path_for_imports(
+        self, current_file_id: str | None = None
+    ) -> str:
         """
         Get current module path for import resolution
 
@@ -203,7 +231,7 @@ class SymbolResolver:
             return self._get_module_path_by_file_id(current_file_id) or ""
         return ""
 
-    def get_resolution_stats(self) -> Dict[str, Any]:
+    def get_resolution_stats(self) -> dict[str, Any]:
         """
         Get statistics about resolution performance
 

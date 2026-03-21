@@ -1,5 +1,7 @@
 """Subagent manager for background task execution."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import uuid
@@ -15,6 +17,7 @@ from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.filesystem import ReadFileTool, WriteFileTool, ListDirTool
 from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.web import WebSearchTool, WebFetchTool
+from nanobot.config.schema import ExecToolConfig
 
 
 class SubagentManager:
@@ -33,10 +36,9 @@ class SubagentManager:
         bus: MessageBus,
         model: str | None = None,
         brave_api_key: str | None = None,
-        exec_config: "ExecToolConfig | None" = None,
+        exec_config: ExecToolConfig | None = None,
         restrict_to_workspace: bool = False,
     ):
-        from nanobot.config.schema import ExecToolConfig
         self.provider = provider
         self.workspace = workspace
         self.bus = bus

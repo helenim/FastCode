@@ -6,30 +6,34 @@ Complete API with all features from web_app.py
 import os
 import platform
 
-if platform.system() == 'Darwin':
-    os.environ['TOKENIZERS_PARALLELISM'] = 'false'
-    os.environ['OMP_NUM_THREADS'] = '1'
-    os.environ['OPENBLAS_NUM_THREADS'] = '1'
-    os.environ['MKL_NUM_THREADS'] = '1'
+if platform.system() == "Darwin":
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
 
-from fastapi import FastAPI, HTTPException, File, UploadFile, Depends
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
-import uvicorn
-import logging
-from pathlib import Path
-import tempfile
-import zipfile
-import shutil
-import uuid
-import json as json_module
 import asyncio
+import json as json_module
+import logging
+import shutil
+import tempfile
 import threading
+import uuid
+import zipfile
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+import uvicorn
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from fastcode import FastCode
+
+# Default bind for Docker / compose; use 127.0.0.1 when exposing only locally.
+_DEFAULT_API_HOST = "0.0.0.0"  # nosec B104
 
 # --- Keycloak JWT authentication ---
 try:
@@ -52,7 +56,9 @@ else:
     from fastapi import HTTPException as _HTTPException
 
     async def _reject_no_auth():
-        raise _HTTPException(status_code=503, detail="Authentication service unavailable")
+        raise _HTTPException(
+            status_code=503, detail="Authentication service unavailable"
+        )
 
     _auth_dependencies = [Depends(_reject_no_auth)]
 
@@ -60,37 +66,45 @@ else:
 # Pydantic models
 class LoadRepositoryRequest(BaseModel):
     source: str = Field(..., description="Repository URL or local path")
-    is_url: Optional[bool] = Field(
+    is_url: bool | None = Field(
         None,
-        description="True if source is URL, False if local path. If omitted, auto-detect."
+        description="True if source is URL, False if local path. If omitted, auto-detect.",
     )
 
 
 class QueryRequest(BaseModel):
     question: str = Field(..., description="Question to ask about the repository")
-    filters: Optional[Dict[str, Any]] = Field(None, description="Optional filters")
-    repo_filter: Optional[List[str]] = Field(None, description="Repository names to search")
+    filters: dict[str, Any] | None = Field(None, description="Optional filters")
+    repo_filter: list[str] | None = Field(
+        None, description="Repository names to search"
+    )
     multi_turn: bool = Field(False, description="Enable multi-turn mode")
-    session_id: Optional[str] = Field(None, description="Session ID for multi-turn dialogue")
+    session_id: str | None = Field(
+        None, description="Session ID for multi-turn dialogue"
+    )
 
 
 class QueryResponse(BaseModel):
     answer: str
     query: str
     context_elements: int
-    sources: List[Dict[str, Any]]
-    prompt_tokens: Optional[int] = None
-    completion_tokens: Optional[int] = None
-    total_tokens: Optional[int] = None
-    session_id: Optional[str] = None
+    sources: list[dict[str, Any]]
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    session_id: str | None = None
 
 
 class LoadRepositoriesRequest(BaseModel):
-    repo_names: List[str] = Field(..., description="Repository names to load from existing indexes")
+    repo_names: list[str] = Field(
+        ..., description="Repository names to load from existing indexes"
+    )
 
 
 class IndexMultipleRequest(BaseModel):
-    sources: List[LoadRepositoryRequest] = Field(..., description="Multiple repositories to load and index")
+    sources: list[LoadRepositoryRequest] = Field(
+        ..., description="Multiple repositories to load and index"
+    )
 
 
 class NewSessionResponse(BaseModel):
@@ -98,20 +112,23 @@ class NewSessionResponse(BaseModel):
 
 
 class DeleteReposRequest(BaseModel):
-    repo_names: List[str] = Field(..., description="Repository names to delete")
-    delete_source: bool = Field(True, description="Also delete cloned source code in repos/")
+    repo_names: list[str] = Field(..., description="Repository names to delete")
+    delete_source: bool = Field(
+        True, description="Also delete cloned source code in repos/"
+    )
 
 
 class StatusResponse(BaseModel):
     status: str
     repo_loaded: bool
     repo_indexed: bool
-    repo_info: Dict[str, Any]
-    available_repositories: List[Dict[str, Any]] = Field(default_factory=list)
-    loaded_repositories: List[Dict[str, Any]] = Field(default_factory=list)
+    repo_info: dict[str, Any]
+    available_repositories: list[dict[str, Any]] = Field(default_factory=list)
+    loaded_repositories: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # Initialize FastAPI app
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -133,12 +150,15 @@ app = FastAPI(
 # Security headers middleware
 try:
     from ebridge_auth.security_headers import SecurityHeadersMiddleware
+
     app.add_middleware(SecurityHeadersMiddleware)
 except ImportError:
     pass
 
 # CORS middleware
-_cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+_cors_origins = os.getenv(
+    "CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173"
+).split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _cors_origins if o.strip()],
@@ -148,7 +168,7 @@ app.add_middleware(
 )
 
 # Global FastCode instance
-fastcode_instance: Optional[FastCode] = None
+fastcode_instance: FastCode | None = None
 _fastcode_lock = threading.Lock()
 
 # Setup logging
@@ -158,10 +178,7 @@ log_dir.mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_dir / "api.log"),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.FileHandler(log_dir / "api.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -175,7 +192,6 @@ def _ensure_fastcode_initialized():
                 logger.info("Initializing FastCode system (lazy initialization)")
                 fastcode_instance = FastCode()
     return fastcode_instance
-
 
 
 @app.get("/", dependencies=_auth_dependencies)
@@ -218,7 +234,9 @@ async def get_status(full_scan: bool = False):
     """
     fastcode = _ensure_fastcode_initialized()
 
-    available_repos = fastcode.vector_store.scan_available_indexes(use_cache=not full_scan)
+    available_repos = fastcode.vector_store.scan_available_indexes(
+        use_cache=not full_scan
+    )
     loaded_repos = fastcode.list_repositories()
 
     return StatusResponse(
@@ -242,7 +260,9 @@ async def list_repositories(full_scan: bool = False):
     fastcode = _ensure_fastcode_initialized()
 
     try:
-        available_repos = fastcode.vector_store.scan_available_indexes(use_cache=not full_scan)
+        available_repos = fastcode.vector_store.scan_available_indexes(
+            use_cache=not full_scan
+        )
         loaded_repos = fastcode.list_repositories()
 
         return {
@@ -307,7 +327,9 @@ async def load_and_index(request: LoadRepositoryRequest, force: bool = False):
 
     try:
         logger.info(f"Loading repository: {request.source}")
-        await asyncio.to_thread(fastcode.load_repository, request.source, request.is_url)
+        await asyncio.to_thread(
+            fastcode.load_repository, request.source, request.is_url
+        )
 
         logger.info("Indexing repository")
         await asyncio.to_thread(fastcode.index_repository, force=force)
@@ -338,7 +360,9 @@ async def load_repositories(request: LoadRepositoriesRequest):
         success = fastcode._load_multi_repo_cache(repo_names=request.repo_names)
 
         if not success:
-            raise HTTPException(status_code=500, detail="Failed to load repositories from cache")
+            raise HTTPException(
+                status_code=500, detail="Failed to load repositories from cache"
+            )
 
         return {
             "status": "success",
@@ -381,7 +405,7 @@ async def upload_repository_zip(file: UploadFile = File(...)):
     """Upload and extract repository ZIP file"""
     fastcode = _ensure_fastcode_initialized()
 
-    if not file.filename.endswith('.zip'):
+    if not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only ZIP files are supported")
 
     file.file.seek(0, 2)
@@ -390,13 +414,16 @@ async def upload_repository_zip(file: UploadFile = File(...)):
 
     max_size = 100 * 1024 * 1024  # 100MB
     if file_size > max_size:
-        raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {max_size / (1024*1024)}MB")
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum size is {max_size / (1024 * 1024)}MB",
+        )
 
     try:
-        repo_name = file.filename.rsplit('.', 1)[0]
-        for suffix in ['-main', '-master', '_main', '_master']:
+        repo_name = file.filename.rsplit(".", 1)[0]
+        for suffix in ["-main", "-master", "_main", "_master"]:
             if repo_name.endswith(suffix):
-                repo_name = repo_name[:-len(suffix)]
+                repo_name = repo_name[: -len(suffix)]
                 break
 
         repo_workspace = getattr(fastcode.loader, "safe_repo_root", "./repos")
@@ -419,7 +446,7 @@ async def upload_repository_zip(file: UploadFile = File(...)):
         extract_dir.mkdir(exist_ok=True)
 
         logger.info(f"Extracting ZIP file to temporary directory: {extract_dir}")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_dir)
 
         extracted_items = list(extract_dir.iterdir())
@@ -570,7 +597,7 @@ async def query_repository_stream(request: QueryRequest):
                             "type": "status",
                             "status": "generating",
                             "sources": serialized_sources,
-                            "session_id": session_id
+                            "session_id": session_id,
                         }
                     elif status == "complete":
                         sources = metadata.get("sources", [])
@@ -579,7 +606,7 @@ async def query_repository_stream(request: QueryRequest):
                             "type": "done",
                             "sources": serialized_sources,
                             "context_elements": metadata.get("context_elements", 0),
-                            "session_id": session_id
+                            "session_id": session_id,
                         }
                     elif "error" in metadata:
                         event_data = {"type": "error", "error": metadata["error"]}
@@ -604,7 +631,7 @@ async def query_repository_stream(request: QueryRequest):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
@@ -616,7 +643,7 @@ async def get_repository_summary():
     if not fastcode.repo_loaded:
         raise HTTPException(status_code=400, detail="No repository loaded")
 
-    summary_payload: Dict[str, Any] = {
+    summary_payload: dict[str, Any] = {
         "status": "success",
     }
 
@@ -632,8 +659,10 @@ async def get_repository_summary():
     return summary_payload
 
 
-@app.post("/new-session", response_model=NewSessionResponse, dependencies=_auth_dependencies)
-async def new_session(clear_session_id: Optional[str] = None):
+@app.post(
+    "/new-session", response_model=NewSessionResponse, dependencies=_auth_dependencies
+)
+async def new_session(clear_session_id: str | None = None):
     """Start a new conversation session"""
     fastcode = _ensure_fastcode_initialized()
 
@@ -655,7 +684,9 @@ async def list_sessions():
         for session in sessions:
             formatted_session = {
                 "session_id": session.get("session_id", ""),
-                "title": session.get("title", f"Session {session.get('session_id', '')}"),
+                "title": session.get(
+                    "title", f"Session {session.get('session_id', '')}"
+                ),
                 "total_turns": session.get("total_turns", 0),
                 "created": session.get("created", 0),
                 "last_updated": session.get("last_updated", 0),
@@ -689,7 +720,9 @@ async def delete_session(session_id: str):
     try:
         history = fastcode.get_session_history(session_id)
         if not history:
-            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+            raise HTTPException(
+                status_code=404, detail=f"Session '{session_id}' not found"
+            )
 
         success = fastcode.delete_session(session_id)
         if success:
@@ -747,7 +780,10 @@ async def clear_cache():
     if success:
         return {"status": "success", "message": "Cache cleared"}
     else:
-        return {"status": "failed", "message": "Failed to clear cache or cache disabled"}
+        return {
+            "status": "failed",
+            "message": "Failed to clear cache or cache disabled",
+        }
 
 
 @app.get("/cache-stats", dependencies=_auth_dependencies)
@@ -817,7 +853,11 @@ def _safe_jsonable(obj: Any) -> Any:
     return repr(obj)
 
 
-def start_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
+def start_api(
+    host: str = _DEFAULT_API_HOST,
+    port: int = 8000,
+    reload: bool = False,
+):
     """Start the API server"""
     logger.info(f"Starting FastCode API at http://{host}:{port}")
     logger.info(f"API documentation available at http://{host}:{port}/docs")
@@ -828,8 +868,14 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="FastCode API Server")
-    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=8000, help="Port to bind to (default: 8000)")
+    parser.add_argument(
+        "--host",
+        default=_DEFAULT_API_HOST,
+        help="Host to bind (default all interfaces for containers; use 127.0.0.1 for local-only)",
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="Port to bind to (default: 8000)"
+    )
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload")
 
     args = parser.parse_args()

@@ -3,6 +3,7 @@
 import asyncio
 import os
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -66,9 +67,13 @@ class ExecTool(Tool):
         if guard_error:
             return guard_error
         
+        argv_err = self._parse_exec_argv(command)
+        if isinstance(argv_err, str):
+            return argv_err
+
         try:
-            process = await asyncio.create_subprocess_shell(
-                command,
+            process = await asyncio.create_subprocess_exec(
+                *argv_err,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=cwd,
@@ -108,6 +113,22 @@ class ExecTool(Tool):
         except Exception as e:
             return f"Error executing command: {str(e)}"
 
+    def _parse_exec_argv(self, command: str) -> list[str] | str:
+        """Split command into argv for subprocess_exec (no shell). Rejects shell metacharacters."""
+        try:
+            parts = shlex.split(command.strip(), posix=True)
+        except ValueError as e:
+            return f"Error: Invalid command quoting: {e}"
+        if not parts:
+            return "Error: Empty command"
+        shell_tokens = {"|", "&&", "||", ";", ">", "<", "&", ">>", "<<", "&>", "2>"}
+        if shell_tokens.intersection(parts):
+            return (
+                "Error: Shell syntax (pipes, redirects, backgrounding) is not supported; "
+                "invoke a single program and its arguments only."
+            )
+        return parts
+
     def _guard_command(self, command: str, cwd: str) -> str | None:
         """Best-effort safety guard for potentially destructive commands."""
         cmd = command.strip()
@@ -133,7 +154,7 @@ class ExecTool(Tool):
             for raw in win_paths + posix_paths:
                 try:
                     p = Path(raw).resolve()
-                except Exception:
+                except OSError:
                     continue
                 if cwd_path not in p.parents and p != cwd_path:
                     return "Error: Command blocked by safety guard (path outside working dir)"

@@ -22,23 +22,21 @@ MCP config example (for Claude Code / Cursor):
     }
 """
 
+import inspect
+import logging
 import os
 import sys
-import logging
-import asyncio
 import uuid
-import inspect
-from typing import Optional, List
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# Logging (file only – stdout is reserved for MCP JSON-RPC in stdio mode)
+# Logging (file only - stdout is reserved for MCP JSON-RPC in stdio mode)
 # ---------------------------------------------------------------------------
 log_dir = os.path.join(PROJECT_ROOT, "logs")
 os.makedirs(log_dir, exist_ok=True)
@@ -62,6 +60,7 @@ def _get_fastcode():
     if _fastcode_instance is None:
         logger.info("Initializing FastCode engine …")
         from fastcode import FastCode
+
         _fastcode_instance = FastCode()
         logger.info("FastCode engine ready.")
     return _fastcode_instance
@@ -70,6 +69,7 @@ def _get_fastcode():
 def _repo_name_from_source(source: str, is_url: bool) -> str:
     """Derive a canonical repo name from a URL or local path."""
     from fastcode.utils import get_repo_name_from_url
+
     if is_url:
         return get_repo_name_from_url(source)
     # Local path: use the directory basename
@@ -108,10 +108,12 @@ def _apply_forced_env_excludes(fc) -> None:
 
     # Optional (opt-in): site-packages can be huge/noisy in some repos.
     if os.getenv("FASTCODE_EXCLUDE_SITE_PACKAGES", "0").lower() in {"1", "true", "yes"}:
-        forced_patterns.extend([
-            "site-packages",
-            "**/site-packages/**",
-        ])
+        forced_patterns.extend(
+            [
+                "site-packages",
+                "**/site-packages/**",
+            ]
+        )
 
     added = []
     for pattern in forced_patterns:
@@ -127,7 +129,7 @@ def _apply_forced_env_excludes(fc) -> None:
         logger.info(f"Added forced ignore patterns: {added}")
 
 
-def _ensure_repos_ready(repos: List[str], ctx=None) -> List[str]:
+def _ensure_repos_ready(repos: list[str], ctx=None) -> list[str]:
     """
     For each repo source string:
       - If already indexed → skip
@@ -138,13 +140,13 @@ def _ensure_repos_ready(repos: List[str], ctx=None) -> List[str]:
     """
     fc = _get_fastcode()
     _apply_forced_env_excludes(fc)
-    ready_names: List[str] = []
+    ready_names: list[str] = []
 
     for source in repos:
         resolved_is_url = fc._infer_is_url(source)
         name = _repo_name_from_source(source, resolved_is_url)
 
-        # Already indexed – nothing to do
+        # Already indexed - nothing to do
         if _is_repo_indexed(name):
             logger.info(f"Repo '{name}' already indexed, skipping.")
             ready_names.append(name)
@@ -176,7 +178,9 @@ def _ensure_repos_ready(repos: List[str], ctx=None) -> List[str]:
 # ---------------------------------------------------------------------------
 # MCP Server
 # ---------------------------------------------------------------------------
-MCP_SERVER_DESCRIPTION = "Repo-level code understanding - ask questions about any codebase."
+MCP_SERVER_DESCRIPTION = (
+    "Repo-level code understanding - ask questions about any codebase."
+)
 _fastmcp_kwargs = {}
 try:
     # Backward compatibility: older mcp versions do not accept `description`.
@@ -265,7 +269,11 @@ def code_qa(
                     start = start or parsed_start
                     end = end or parsed_end
             loc = f"L{start}-L{end}" if start and end else ""
-            parts.append(f"  - {repo}/{file_path}:{loc} ({name})" if repo else f"  - {file_path}:{loc} ({name})")
+            parts.append(
+                f"  - {repo}/{file_path}:{loc} ({name})"
+                if repo
+                else f"  - {file_path}:{loc} ({name})"
+            )
 
     parts.append(f"\n[session_id: {sid}]")
     return "\n".join(parts)
@@ -291,7 +299,7 @@ def list_sessions() -> str:
         title = s.get("title", "Untitled")
         turns = s.get("total_turns", 0)
         mode = "multi-turn" if s.get("multi_turn", False) else "single-turn"
-        lines.append(f"  - {sid}: \"{title}\" ({turns} turns, {mode})")
+        lines.append(f'  - {sid}: "{title}" ({turns} turns, {mode})')
 
     return "\n".join(lines)
 
@@ -409,11 +417,15 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="FastCode MCP Server")
     parser.add_argument(
-        "--transport", choices=["stdio", "sse"], default="stdio",
+        "--transport",
+        choices=["stdio", "sse"],
+        default="stdio",
         help="MCP transport (default: stdio)",
     )
     parser.add_argument(
-        "--port", type=int, default=8080,
+        "--port",
+        type=int,
+        default=8080,
         help="Port for SSE transport (default: 8080)",
     )
     args = parser.parse_args()

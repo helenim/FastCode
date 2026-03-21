@@ -8,7 +8,6 @@ Communication: HTTP requests to FastCode's FastAPI backend.
 In Docker Compose: nanobot -> http://fastcode:8001/...
 """
 
-import json
 import os
 from typing import Any
 

@@ -6,37 +6,36 @@ With Multi-Repository Support
 import os
 import platform
 
-if platform.system() == 'Darwin':
-    os.environ['TOKENIZERS_PARALLELISM'] = 'false'
-    os.environ['OMP_NUM_THREADS'] = '1'
-    os.environ['OPENBLAS_NUM_THREADS'] = '1'
-    os.environ['MKL_NUM_THREADS'] = '1'
+if platform.system() == "Darwin":
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
 
-from .main import FastCode
-from .loader import RepositoryLoader
-from .parser import CodeParser
-from .indexer import CodeIndexer
-from .retriever import HybridRetriever
+from .agent_tools import AgentTools
 from .answer_generator import AnswerGenerator
+from .indexer import CodeIndexer
+from .iterative_agent import IterativeAgent
+from .loader import RepositoryLoader
+from .main import FastCode
+from .parser import CodeParser
 from .repo_overview import RepositoryOverviewGenerator
 from .repo_selector import RepositorySelector
-from .iterative_agent import IterativeAgent
-from .agent_tools import AgentTools
+from .retriever import HybridRetriever
 
 __version__ = "2.0.0"
 FastCode = FastCode
 
 __all__ = [
-    "FastCode",
-    "FastCode",
-    "RepositoryLoader",
-    "CodeParser",
-    "CodeIndexer",
-    "HybridRetriever",
+    "AgentTools",
     "AnswerGenerator",
+    "CodeIndexer",
+    "CodeParser",
+    "FastCode",
+    "FastCode",
+    "HybridRetriever",
+    "IterativeAgent",
+    "RepositoryLoader",
     "RepositoryOverviewGenerator",
     "RepositorySelector",
-    "IterativeAgent",
-    "AgentTools",
 ]
-

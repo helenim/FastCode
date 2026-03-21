@@ -33,12 +33,27 @@ class CodeGraphBuilder:
         self.build_inheritance_graph = self.graph_config.get(
             "build_inheritance_graph", True
         )
+        self.build_tests_graph = self.graph_config.get("build_tests_graph", True)
+        self.build_co_change_graph = self.graph_config.get("build_co_change_graph", True)
+        self.build_type_usage_graph = self.graph_config.get("build_type_usage_graph", True)
+        self.community_detection = self.graph_config.get("community_detection", True)
+        self.blast_radius_hops = self.graph_config.get("blast_radius_hops", 2)
         self.max_depth = self.graph_config.get("max_depth", 5)
+        self.co_change_lookback = self.graph_config.get("co_change_lookback", 100)
+        self.co_change_min_commits = self.graph_config.get("co_change_min_commits", 3)
+
+        # Community assignments: node_id -> community_id
+        self.communities: dict[str, int] = {}
+        # Community hub nodes (highest degree within each community)
+        self.community_hubs: dict[int, str] = {}
 
         # Graphs
         self.call_graph = nx.DiGraph()
         self.dependency_graph = nx.DiGraph()
         self.inheritance_graph = nx.DiGraph()
+        self.tests_graph = nx.DiGraph()       # TESTS edges: test -> tested target
+        self.co_change_graph = nx.Graph()      # FILE_CHANGES_WITH edges (undirected, weighted)
+        self.type_usage_graph = nx.DiGraph()   # USES_TYPE edges: function -> type reference
 
         # Maps for quick lookup
         self.element_by_name: dict[str, CodeElement] = {}
@@ -141,11 +156,20 @@ class CodeGraphBuilder:
         if self.build_call_graph:
             self._build_call_graph(elements, symbol_resolver)
 
+        if self.build_tests_graph:
+            self._build_tests_graph(elements)
+
+        if self.build_type_usage_graph:
+            self._build_type_usage_graph(elements)
+
         self.logger.info(
             f"Built graphs: "
             f"dependency ({self.dependency_graph.number_of_nodes()} nodes), "
             f"inheritance ({self.inheritance_graph.number_of_nodes()} nodes), "
-            f"call ({self.call_graph.number_of_nodes()} nodes)"
+            f"call ({self.call_graph.number_of_nodes()} nodes), "
+            f"tests ({self.tests_graph.number_of_nodes()} nodes), "
+            f"co_change ({self.co_change_graph.number_of_nodes()} nodes), "
+            f"type_usage ({self.type_usage_graph.number_of_nodes()} nodes)"
         )
 
     def _build_dependency_graph(
@@ -504,6 +528,309 @@ class CodeGraphBuilder:
             f"({linked_calls / total_calls * 100 if total_calls > 0 else 0:.1f}% success rate)"
         )
 
+    def _build_tests_graph(self, elements: list[CodeElement]) -> None:
+        """Build TESTS graph: test functions → tested targets.
+
+        Detection heuristics:
+        - Naming convention: test_foo → foo, TestFoo → Foo
+        - Import analysis: if a test file imports a target, link test functions to it
+        """
+        self.tests_graph = nx.DiGraph()
+
+        # Index non-test elements by name for matching
+        targets_by_name: dict[str, str] = {}  # name -> element_id
+        test_elements: list[CodeElement] = []
+
+        for elem in elements:
+            if elem.type in ("function", "class"):
+                name = elem.name
+                is_test = (
+                    name.startswith("test_")
+                    or name.startswith("Test")
+                    or (elem.file_path and "/test" in elem.file_path)
+                )
+                if is_test:
+                    test_elements.append(elem)
+                else:
+                    targets_by_name[name] = elem.id
+                    # Also index without common prefixes
+                    if name.startswith("_"):
+                        targets_by_name[name.lstrip("_")] = elem.id
+
+        # Match tests to targets
+        for test_elem in test_elements:
+            self.tests_graph.add_node(test_elem.id, type="test")
+            matched = False
+
+            # Naming convention: test_foo → foo
+            name = test_elem.name
+            if name.startswith("test_"):
+                target_name = name[5:]  # Remove "test_" prefix
+                if target_name in targets_by_name:
+                    self.tests_graph.add_edge(
+                        test_elem.id, targets_by_name[target_name], edge_type="TESTS"
+                    )
+                    matched = True
+
+            # Naming convention: TestFoo → Foo
+            if name.startswith("Test") and not name.startswith("test_"):
+                target_name = name[4:]  # Remove "Test" prefix
+                if target_name in targets_by_name:
+                    self.tests_graph.add_edge(
+                        test_elem.id, targets_by_name[target_name], edge_type="TESTS"
+                    )
+                    matched = True
+
+            # Import-based: check if test file imports specific targets
+            if not matched and test_elem.file_path:
+                file_imports = self.imports_by_file.get(test_elem.file_path, [])
+                for imp in file_imports:
+                    imported_names = imp.get("names", [])
+                    if isinstance(imported_names, list):
+                        for imp_name in imported_names:
+                            if isinstance(imp_name, str) and imp_name in targets_by_name:
+                                self.tests_graph.add_edge(
+                                    test_elem.id, targets_by_name[imp_name],
+                                    edge_type="TESTS",
+                                )
+
+        self.logger.info(
+            "Built tests graph: %d nodes, %d edges",
+            self.tests_graph.number_of_nodes(),
+            self.tests_graph.number_of_edges(),
+        )
+
+    def build_co_change_graph(self, repo_path: str) -> None:
+        """Build FILE_CHANGES_WITH graph from git co-change history.
+
+        Files that frequently change together in the same commits get weighted
+        edges. Must be called separately with the repo path (requires git).
+
+        Args:
+            repo_path: Path to the git repository.
+        """
+        try:
+            import git
+        except ImportError:
+            self.logger.warning("GitPython not available; skipping co-change graph")
+            return
+
+        self.co_change_graph = nx.Graph()
+
+        try:
+            repo = git.Repo(repo_path)
+            commits = list(repo.iter_commits("HEAD", max_count=self.co_change_lookback))
+
+            # Count co-occurrences of file pairs across commits
+            from collections import Counter
+            pair_counts: Counter[tuple[str, str]] = Counter()
+
+            for commit in commits:
+                if commit.parents:
+                    try:
+                        changed_files = list(commit.stats.files.keys())
+                    except Exception:
+                        continue
+                else:
+                    continue
+
+                # Count all pairs of changed files
+                for i, f1 in enumerate(changed_files):
+                    for f2 in changed_files[i + 1:]:
+                        pair = tuple(sorted([f1, f2]))
+                        pair_counts[pair] += 1
+
+            # Add edges for pairs that exceed the threshold
+            for (f1, f2), count in pair_counts.items():
+                if count >= self.co_change_min_commits:
+                    self.co_change_graph.add_edge(
+                        f1, f2, weight=count, edge_type="FILE_CHANGES_WITH"
+                    )
+
+            self.logger.info(
+                "Built co-change graph: %d file nodes, %d edges (lookback=%d commits)",
+                self.co_change_graph.number_of_nodes(),
+                self.co_change_graph.number_of_edges(),
+                len(commits),
+            )
+        except Exception as e:
+            self.logger.warning("Failed to build co-change graph: %s", e)
+
+    def _build_type_usage_graph(self, elements: list[CodeElement]) -> None:
+        """Build USES_TYPE graph from type annotations in function signatures.
+
+        Extracts type references from function parameters and return types,
+        linking functions to the types they reference.
+        """
+        self.type_usage_graph = nx.DiGraph()
+
+        # Index classes/types by name
+        type_ids: dict[str, str] = {}  # type_name -> element_id
+        for elem in elements:
+            if elem.type == "class":
+                type_ids[elem.name] = elem.id
+
+        # Extract type references from function signatures
+        for elem in elements:
+            if elem.type != "function":
+                continue
+
+            signature = elem.metadata.get("signature", "")
+            if not signature:
+                continue
+
+            # Simple extraction: find capitalized words that match known types
+            import re
+            # Match type annotation patterns: ": TypeName", "-> TypeName", "list[TypeName]"
+            type_refs = set(re.findall(r'\b([A-Z][a-zA-Z0-9_]+)\b', signature))
+
+            for type_name in type_refs:
+                if type_name in type_ids:
+                    self.type_usage_graph.add_node(elem.id, type="function")
+                    self.type_usage_graph.add_node(type_ids[type_name], type="class")
+                    self.type_usage_graph.add_edge(
+                        elem.id, type_ids[type_name], edge_type="USES_TYPE"
+                    )
+
+        self.logger.info(
+            "Built type usage graph: %d nodes, %d edges",
+            self.type_usage_graph.number_of_nodes(),
+            self.type_usage_graph.number_of_edges(),
+        )
+
+    def detect_communities(self) -> dict[str, int]:
+        """Run Louvain community detection on the combined code graph.
+
+        Merges call, dependency, and inheritance graphs into an undirected
+        graph, then detects communities. Results are stored in self.communities
+        and self.community_hubs.
+
+        Returns:
+            Dict mapping node_id to community_id.
+        """
+        if not self.community_detection:
+            return {}
+
+        # Merge all directed graphs into a single undirected graph for community detection
+        combined = nx.Graph()
+        for graph in [self.call_graph, self.dependency_graph, self.inheritance_graph,
+                      self.tests_graph, self.type_usage_graph]:
+            for u, v in graph.edges():
+                combined.add_edge(u, v)
+        # Add co-change edges (already undirected)
+        for u, v, data in self.co_change_graph.edges(data=True):
+            combined.add_edge(u, v, weight=data.get("weight", 1))
+
+        if combined.number_of_nodes() < 3:
+            self.logger.info("Too few nodes for community detection (%d)", combined.number_of_nodes())
+            return {}
+
+        try:
+            communities_list = nx.community.louvain_communities(combined, seed=42)
+        except Exception as e:
+            self.logger.warning("Community detection failed: %s", e)
+            return {}
+
+        # Assign community IDs and find hub nodes
+        self.communities = {}
+        self.community_hubs = {}
+
+        for community_id, members in enumerate(communities_list):
+            hub_node = None
+            hub_degree = -1
+            for node in members:
+                self.communities[node] = community_id
+                degree = combined.degree(node)
+                if degree > hub_degree:
+                    hub_degree = degree
+                    hub_node = node
+            if hub_node:
+                self.community_hubs[community_id] = hub_node
+
+        self.logger.info(
+            "Detected %d communities across %d nodes (Louvain)",
+            len(communities_list), combined.number_of_nodes(),
+        )
+        return self.communities
+
+    def blast_radius(self, node_id: str, max_hops: int | None = None) -> dict[str, float]:
+        """Compute the blast radius of a node: all reachable nodes within N hops,
+        weighted by edge type importance.
+
+        Useful for impact analysis: "if I change this function, what else is affected?"
+
+        Args:
+            node_id: Starting node ID.
+            max_hops: Max traversal depth (defaults to config blast_radius_hops).
+
+        Returns:
+            Dict mapping reachable node_id to impact score (0-1, higher = closer).
+        """
+        if max_hops is None:
+            max_hops = self.blast_radius_hops
+
+        # Edge type weights (how much a change propagates through each edge type)
+        edge_weights = {
+            "call": 1.0,         # Callers are directly affected
+            "dependency": 0.8,   # Importers are affected
+            "inheritance": 0.9,  # Subclasses are affected
+            "tests": 0.7,       # Tests need updating
+            "type_usage": 0.5,  # Type users may need updating
+            "co_change": 0.4,   # Historically co-changed files
+        }
+
+        reachable: dict[str, float] = {}
+
+        graph_configs = [
+            (self.call_graph, "call", True),         # directed: check both directions
+            (self.dependency_graph, "dependency", True),
+            (self.inheritance_graph, "inheritance", True),
+            (self.tests_graph, "tests", True),
+            (self.type_usage_graph, "type_usage", True),
+            (self.co_change_graph, "co_change", False),  # undirected
+        ]
+
+        for graph, edge_type, directed in graph_configs:
+            weight = edge_weights.get(edge_type, 0.5)
+
+            if node_id not in graph:
+                continue
+
+            # Forward traversal
+            for node, distance in nx.single_source_shortest_path_length(
+                graph, node_id, cutoff=max_hops
+            ).items():
+                if node == node_id:
+                    continue
+                score = weight * (1.0 / (1.0 + distance))
+                reachable[node] = max(reachable.get(node, 0), score)
+
+            # Reverse traversal for directed graphs
+            if directed:
+                for node, distance in nx.single_source_shortest_path_length(
+                    graph.reverse(), node_id, cutoff=max_hops
+                ).items():
+                    if node == node_id:
+                        continue
+                    score = weight * (1.0 / (1.0 + distance))
+                    reachable[node] = max(reachable.get(node, 0), score)
+
+        return reachable
+
+    def get_community_members(self, node_id: str) -> list[str]:
+        """Get all members of the same community as the given node."""
+        if node_id not in self.communities:
+            return []
+        community_id = self.communities[node_id]
+        return [n for n, c in self.communities.items() if c == community_id]
+
+    def get_community_hub(self, node_id: str) -> str | None:
+        """Get the hub node (highest degree) of the community containing node_id."""
+        if node_id not in self.communities:
+            return None
+        community_id = self.communities[node_id]
+        return self.community_hubs.get(community_id)
+
     def get_related_elements(self, element_id: str, max_hops: int = 2) -> set[str]:
         """
         Get related elements within max_hops distance
@@ -517,20 +844,31 @@ class CodeGraphBuilder:
         """
         related = set()
 
-        # Check all graphs
-        for graph in [self.dependency_graph, self.inheritance_graph, self.call_graph]:
+        # Check all directed graphs (forward + reverse traversal)
+        directed_graphs = [
+            self.dependency_graph,
+            self.inheritance_graph,
+            self.call_graph,
+            self.tests_graph,
+            self.type_usage_graph,
+        ]
+        for graph in directed_graphs:
             if element_id in graph:
-                # Get predecessors and successors within max_hops
                 for node in nx.single_source_shortest_path_length(
                     graph, element_id, cutoff=max_hops
                 ):
                     related.add(node)
-
-                # Also check reverse direction
                 for node in nx.single_source_shortest_path_length(
                     graph.reverse(), element_id, cutoff=max_hops
                 ):
                     related.add(node)
+
+        # Check undirected graphs
+        if element_id in self.co_change_graph:
+            for node in nx.single_source_shortest_path_length(
+                self.co_change_graph, element_id, cutoff=max_hops
+            ):
+                related.add(node)
 
         return related
 
@@ -629,6 +967,9 @@ class CodeGraphBuilder:
             ("dependency", self.dependency_graph),
             ("inheritance", self.inheritance_graph),
             ("call", self.call_graph),
+            ("tests", self.tests_graph),
+            ("co_change", self.co_change_graph),
+            ("type_usage", self.type_usage_graph),
         ]:
             stats[name] = {
                 "nodes": graph.number_of_nodes(),
@@ -662,6 +1003,9 @@ class CodeGraphBuilder:
                         "call_graph": self.call_graph,
                         "dependency_graph": self.dependency_graph,
                         "inheritance_graph": self.inheritance_graph,
+                        "tests_graph": self.tests_graph,
+                        "co_change_graph": self.co_change_graph,
+                        "type_usage_graph": self.type_usage_graph,
                         "element_by_name": {
                             k: v.to_dict() for k, v in self.element_by_name.items()
                         },
@@ -716,6 +1060,9 @@ class CodeGraphBuilder:
                 self.call_graph = data["call_graph"]
                 self.dependency_graph = data["dependency_graph"]
                 self.inheritance_graph = data["inheritance_graph"]
+                self.tests_graph = data.get("tests_graph", nx.DiGraph())
+                self.co_change_graph = data.get("co_change_graph", nx.Graph())
+                self.type_usage_graph = data.get("type_usage_graph", nx.DiGraph())
                 self.imports_by_file = data["imports_by_file"]
 
                 # Reconstruct indices with CodeElement objects

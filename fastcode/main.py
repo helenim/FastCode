@@ -30,7 +30,7 @@ from .utils import (
     resolve_config_paths,
     setup_logging,
 )
-from .vector_store import VectorStore
+from .vector_stores import create_vector_store
 
 
 class FastCode:
@@ -93,7 +93,7 @@ class FastCode:
         self.loader = RepositoryLoader(self.config)
         self.parser = CodeParser(self.config)
         self.embedder = CodeEmbedder(self.config)
-        self.vector_store = VectorStore(self.config)
+        self.vector_store = create_vector_store(self.config)
         self.indexer = CodeIndexer(
             self.config, self.loader, self.parser, self.embedder, self.vector_store
         )
@@ -1082,7 +1082,7 @@ class FastCode:
                 self.logger.info(f"Indexing repository: {repo_name}")
 
                 # Create a fresh vector store for this repository
-                temp_vector_store = VectorStore(self.config)
+                temp_vector_store = create_vector_store(self.config)
                 temp_vector_store.initialize(self.embedder.embedding_dim)
 
                 # Create a temporary indexer with the temp vector store for this repo

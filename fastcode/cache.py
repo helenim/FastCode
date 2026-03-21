@@ -1,5 +1,9 @@
 """
-Caching Module - Cache embeddings, queries, and results
+Caching Module - Cache embeddings, queries, and results.
+
+Includes:
+- CacheManager: Exact-key caching (disk/redis) for embeddings and dialogue history
+- SemanticCache: Vector-similarity caching for repeated/similar queries
 """
 
 import hashlib
@@ -10,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from diskcache import Cache as DiskCache
 
 
@@ -484,3 +489,159 @@ class CacheManager:
         except Exception as e:
             self.logger.error(f"Failed to list sessions: {e}")
             return []
+
+
+class SemanticCache:
+    """Vector-similarity cache for code retrieval queries.
+
+    Uses a small in-memory FAISS FlatIP index of past query embeddings.
+    When a new query arrives, it checks if a semantically similar query
+    has been seen before (cosine similarity >= threshold). On a hit,
+    the cached result is returned instantly.
+
+    Cache is scoped by a sorted repo-name key to avoid cross-repo false hits.
+    """
+
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.logger = logging.getLogger(__name__)
+
+        sem_cfg = config.get("cache", {}).get("semantic_cache", {})
+        self.enabled: bool = sem_cfg.get("enabled", False)
+        self.threshold: float = sem_cfg.get("similarity_threshold", 0.90)
+        self.max_entries: int = sem_cfg.get("max_entries", 10000)
+        self.ttl: int = sem_cfg.get("ttl", 3600)
+
+        # Per-scope caches: scope_key -> (faiss_index, entries_list)
+        self._scopes: dict[str, _ScopedCache] = {}
+
+    def lookup(
+        self,
+        query_embedding: np.ndarray,
+        repo_names: list[str],
+    ) -> Any | None:
+        """Check if a similar query exists in cache.
+
+        Args:
+            query_embedding: L2-normalized query embedding vector.
+            repo_names: List of repo names (defines cache scope).
+
+        Returns:
+            Cached result if similarity >= threshold, else None.
+        """
+        if not self.enabled:
+            return None
+
+        scope = self._get_scope(repo_names)
+        if scope is None:
+            return None
+
+        return scope.lookup(query_embedding, self.threshold)
+
+    def store(
+        self,
+        query_embedding: np.ndarray,
+        repo_names: list[str],
+        result: Any,
+    ) -> None:
+        """Store a query result in the semantic cache.
+
+        Args:
+            query_embedding: L2-normalized query embedding vector.
+            repo_names: List of repo names (defines cache scope).
+            result: The result to cache.
+        """
+        if not self.enabled:
+            return
+
+        scope_key = self._scope_key(repo_names)
+        if scope_key not in self._scopes:
+            dim = query_embedding.shape[0]
+            self._scopes[scope_key] = _ScopedCache(dim, self.max_entries, self.ttl)
+
+        self._scopes[scope_key].store(query_embedding, result)
+
+    def invalidate(self, repo_names: list[str] | None = None) -> None:
+        """Clear semantic cache for specific repos or all repos."""
+        if repo_names is None:
+            self._scopes.clear()
+            self.logger.info("Cleared all semantic cache scopes")
+        else:
+            key = self._scope_key(repo_names)
+            if key in self._scopes:
+                del self._scopes[key]
+                self.logger.info("Cleared semantic cache for scope: %s", key)
+
+    def stats(self) -> dict[str, Any]:
+        """Return cache statistics."""
+        total_entries = sum(s.count for s in self._scopes.values())
+        return {
+            "enabled": self.enabled,
+            "scopes": len(self._scopes),
+            "total_entries": total_entries,
+            "threshold": self.threshold,
+        }
+
+    def _scope_key(self, repo_names: list[str]) -> str:
+        return "|".join(sorted(repo_names))
+
+    def _get_scope(self, repo_names: list[str]) -> "_ScopedCache | None":
+        key = self._scope_key(repo_names)
+        return self._scopes.get(key)
+
+
+class _ScopedCache:
+    """Internal: per-scope FAISS index + result storage with TTL."""
+
+    def __init__(self, dim: int, max_entries: int, ttl: int) -> None:
+        import faiss
+
+        self._index = faiss.IndexFlatIP(dim)
+        self._entries: list[tuple[float, Any]] = []  # (timestamp, result)
+        self._max_entries = max_entries
+        self._ttl = ttl
+        self._dim = dim
+
+    @property
+    def count(self) -> int:
+        return self._index.ntotal
+
+    def lookup(self, query_vec: np.ndarray, threshold: float) -> Any | None:
+        if self._index.ntotal == 0:
+            return None
+
+        query = query_vec.reshape(1, -1).astype(np.float32)
+        distances, indices = self._index.search(query, 1)
+
+        if distances[0][0] >= threshold:
+            idx = int(indices[0][0])
+            if idx < len(self._entries):
+                timestamp, result = self._entries[idx]
+                if time.time() - timestamp <= self._ttl:
+                    return result
+        return None
+
+    def store(self, query_vec: np.ndarray, result: Any) -> None:
+        # Evict oldest entries if at capacity
+        if self._index.ntotal >= self._max_entries:
+            self._evict_oldest()
+
+        vec = query_vec.reshape(1, -1).astype(np.float32)
+        self._index.add(vec)
+        self._entries.append((time.time(), result))
+
+    def _evict_oldest(self) -> None:
+        """Rebuild index without the oldest 10% of entries."""
+        import faiss
+
+        keep_from = max(1, len(self._entries) // 10)
+        self._entries = self._entries[keep_from:]
+
+        # Rebuild FAISS index from remaining vectors
+        new_index = faiss.IndexFlatIP(self._dim)
+        # We don't store the vectors separately, so we must reconstruct them
+        if self._index.ntotal > keep_from:
+            vectors = np.zeros((self._index.ntotal - keep_from, self._dim), dtype=np.float32)
+            for i in range(keep_from, self._index.ntotal):
+                vectors[i - keep_from] = self._index.reconstruct(i)
+            new_index.add(vectors)
+        self._index = new_index

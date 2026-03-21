@@ -1,0 +1,116 @@
+{
+  "name": "fastcode-self-eval",
+  "description": "Golden dataset for evaluating FastCode against its own codebase",
+  "repos": ["fastcode"],
+  "version": "1.0",
+  "queries": [
+    {
+      "query": "How does the embedding system work?",
+      "intent": "explain",
+      "difficulty": "easy",
+      "relevant_elements": [
+        {"file_path": "fastcode/embedder.py", "name": "CodeEmbedder"},
+        {"file_path": "fastcode/embedder.py", "name": "embed_batch"},
+        {"file_path": "fastcode/embedder.py", "name": "_prepare_code_text"}
+      ],
+      "tags": ["embedding", "core"]
+    },
+    {
+      "query": "Where is the hybrid search implemented?",
+      "intent": "where",
+      "difficulty": "easy",
+      "relevant_elements": [
+        {"file_path": "fastcode/retriever.py", "name": "HybridRetriever"},
+        {"file_path": "fastcode/retriever.py", "name": "retrieve"}
+      ],
+      "tags": ["retrieval", "core"]
+    },
+    {
+      "query": "How does the iterative agent decide when to stop retrieving?",
+      "intent": "how",
+      "difficulty": "medium",
+      "relevant_elements": [
+        {"file_path": "fastcode/iterative_agent.py", "name": "IterativeAgent"},
+        {"file_path": "fastcode/iterative_agent.py", "name": "_assess_confidence"}
+      ],
+      "tags": ["agent", "core"]
+    },
+    {
+      "query": "Find the code that builds call graphs from AST",
+      "intent": "find",
+      "difficulty": "medium",
+      "relevant_elements": [
+        {"file_path": "fastcode/graph_builder.py", "name": "CodeGraphBuilder"},
+        {"file_path": "fastcode/graph_builder.py", "name": "build_graphs"},
+        {"file_path": "fastcode/call_extractor.py", "name": "CallExtractor"}
+      ],
+      "tags": ["graph", "parsing"]
+    },
+    {
+      "query": "How does the MCP server handle repository indexing requests?",
+      "intent": "how",
+      "difficulty": "medium",
+      "relevant_elements": [
+        {"file_path": "mcp_server.py", "name": "code_qa"},
+        {"file_path": "mcp_server.py", "name": "_ensure_repos_ready"},
+        {"file_path": "mcp_server.py", "name": "_get_fastcode"}
+      ],
+      "tags": ["mcp", "indexing"]
+    },
+    {
+      "query": "What caching strategies are used and how is cache invalidation handled?",
+      "intent": "what",
+      "difficulty": "hard",
+      "relevant_elements": [
+        {"file_path": "fastcode/cache.py", "name": "CacheManager"},
+        {"file_path": "fastcode/cache.py", "name": "get"},
+        {"file_path": "fastcode/cache.py", "name": "set"},
+        {"file_path": "fastcode/cache.py", "name": "invalidate"}
+      ],
+      "tags": ["cache", "core"]
+    },
+    {
+      "query": "How does tree-sitter parse Python functions and extract their signatures?",
+      "intent": "how",
+      "difficulty": "medium",
+      "relevant_elements": [
+        {"file_path": "fastcode/tree_sitter_parser.py", "name": "TSParser"},
+        {"file_path": "fastcode/parser.py", "name": "CodeParser"},
+        {"file_path": "fastcode/definition_extractor.py", "name": "DefinitionExtractor"}
+      ],
+      "tags": ["parsing", "tree-sitter"]
+    },
+    {
+      "query": "What vector store backends are supported and how are vectors persisted?",
+      "intent": "what",
+      "difficulty": "easy",
+      "relevant_elements": [
+        {"file_path": "fastcode/vector_store.py", "name": "VectorStore"},
+        {"file_path": "fastcode/vector_store.py", "name": "save"},
+        {"file_path": "fastcode/vector_store.py", "name": "load"}
+      ],
+      "tags": ["vector-store", "core"]
+    },
+    {
+      "query": "Debug: why might BM25 keyword search return no results for a query?",
+      "intent": "debug",
+      "difficulty": "hard",
+      "relevant_elements": [
+        {"file_path": "fastcode/retriever.py", "name": "_keyword_search"},
+        {"file_path": "fastcode/retriever.py", "name": "_build_bm25_index"}
+      ],
+      "tags": ["retrieval", "bm25", "debug"]
+    },
+    {
+      "query": "How does the query processor expand and rewrite queries using LLM?",
+      "intent": "how",
+      "difficulty": "medium",
+      "relevant_elements": [
+        {"file_path": "fastcode/query_processor.py", "name": "QueryProcessor"},
+        {"file_path": "fastcode/query_processor.py", "name": "process"},
+        {"file_path": "fastcode/query_processor.py", "name": "_llm_enhance"}
+      ],
+      "tags": ["query", "llm"]
+    }
+  ]
+}

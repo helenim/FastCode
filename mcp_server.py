@@ -2,9 +2,10 @@
 FastCode MCP Server - Expose repo-level code understanding via MCP protocol.
 
 Usage:
-    python mcp_server.py                    # stdio transport (default)
-    python mcp_server.py --transport sse    # SSE transport on port 8080
-    python mcp_server.py --port 9090        # SSE on custom port
+    python mcp_server.py                                     # stdio transport (default)
+    python mcp_server.py --transport streamable-http         # Streamable HTTP (recommended for network)
+    python mcp_server.py --transport sse                     # SSE transport (deprecated)
+    python mcp_server.py --transport streamable-http --port 9090  # Custom port
 
 MCP config example (for Claude Code / Cursor):
     {
@@ -418,19 +419,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FastCode MCP Server")
     parser.add_argument(
         "--transport",
-        choices=["stdio", "sse"],
-        default="stdio",
-        help="MCP transport (default: stdio)",
+        choices=["stdio", "sse", "streamable-http"],
+        default=os.getenv("FASTCODE_TRANSPORT", "stdio"),
+        help="MCP transport (default: stdio, env: FASTCODE_TRANSPORT)",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=8080,
-        help="Port for SSE transport (default: 8080)",
+        default=int(os.getenv("FASTCODE_MCP_PORT", "8080")),
+        help="Port for HTTP/SSE transport (default: 8080, env: FASTCODE_MCP_PORT)",
     )
     args = parser.parse_args()
 
-    if args.transport == "sse":
-        mcp.run(transport="sse", sse_params={"port": args.port})
+    if args.transport in ("sse", "streamable-http"):
+        mcp.run(transport=args.transport, mount_path=f"/mcp")
     else:
         mcp.run(transport="stdio")

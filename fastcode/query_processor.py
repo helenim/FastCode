@@ -29,6 +29,7 @@ class ProcessedQuery:
     # repo_matching_terms: Optional[List[str]] = None  # Terms specifically for matching repository overviews/summaries
     pseudocode_hints: str | None = None  # Pseudocode for implementation queries
     search_strategy: str | None = None  # Recommended search strategy
+    complexity_score: int = 50  # 0-100, used for tiered model routing
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -278,6 +279,8 @@ class QueryProcessor:
                     f"LLM enhancement failed, using rule-based only: {e}"
                 )
 
+        complexity = self._compute_complexity(query, intent, subqueries, keywords)
+
         return ProcessedQuery(
             original=query,
             expanded=expanded,
@@ -289,7 +292,46 @@ class QueryProcessor:
             # repo_matching_terms=repo_matching_terms,
             pseudocode_hints=pseudocode_hints,
             search_strategy=search_strategy,
+            complexity_score=complexity,
         )
+
+    def _compute_complexity(
+        self, query: str, intent: str, subqueries: list[str], keywords: list[str]
+    ) -> int:
+        """Compute query complexity score (0-100) for tiered model routing.
+
+        Low scores (0-40) → simple queries handled by fast/cheap model.
+        High scores (41-100) → complex queries requiring strong model.
+        """
+        score = 30  # Baseline
+
+        # Intent-based scoring
+        intent_scores = {
+            "find": -10,      # Simple lookup
+            "where": -10,     # Location query
+            "what": 0,        # Definition query
+            "explain": 15,    # Requires synthesis
+            "how": 20,        # Requires understanding
+            "debug": 25,      # Requires reasoning about failures
+            "implement": 30,  # Requires code generation
+        }
+        score += intent_scores.get(intent, 0)
+
+        # Subquery count (more subqueries = more complex)
+        score += len(subqueries) * 10
+
+        # Query length (longer queries tend to be more complex)
+        words = query.split()
+        if len(words) > 20:
+            score += 10
+        elif len(words) < 5:
+            score -= 10
+
+        # Keyword diversity
+        if len(keywords) > 5:
+            score += 5
+
+        return max(0, min(100, score))
 
     def _detect_intent(self, query: str) -> str:
         """Detect query intent"""

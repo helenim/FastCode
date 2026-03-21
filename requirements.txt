@@ -8,21 +8,19 @@ gitpython
 
 # Code Parsing
 tree-sitter
+tree-sitter-language-pack>=0.10.0  # 170+ language grammars
+# Individual packages kept as fallback (can be removed if language-pack covers all needs)
 tree-sitter-python
 tree-sitter-javascript
 tree-sitter-typescript
-tree-sitter-java
-tree-sitter-go
-tree-sitter-c
-tree-sitter-cpp
-tree-sitter-rust
-tree-sitter-c-sharp
 libcst
 
 # Embeddings & Vector Store
 sentence-transformers
 faiss-cpu
 chromadb
+httpx  # For ollama/api embedding providers
+qdrant-client>=1.9.0  # Qdrant vector store backend
 
 # Search & Retrieval
 rank-bm25

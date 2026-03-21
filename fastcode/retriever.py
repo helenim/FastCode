@@ -18,7 +18,7 @@ from .iterative_agent import IterativeAgent
 from .query_processor import ProcessedQuery
 from .repo_selector import RepositorySelector
 from .utils import ensure_dir
-from .vector_store import VectorStore
+from .vector_stores import create_vector_store
 
 
 class HybridRetriever:
@@ -939,14 +939,88 @@ class HybridRetriever:
         keyword_results: list[tuple[dict[str, Any], float]],
         pseudocode_results: list[tuple[dict[str, Any], float]] | None = None,
     ) -> list[dict[str, Any]]:
-        """Combine semantic, keyword, and pseudocode search results"""
-        # Create a dictionary to merge results by element ID
-        combined = {}
+        """Combine semantic, keyword, and pseudocode search results.
 
-        # Pseudocode weight (slightly lower than semantic)
+        Supports two fusion methods (configured via retrieval.fusion_method):
+        - "rrf": Reciprocal Rank Fusion (parameter-free, recommended)
+        - "weighted_linear": Original weighted linear combination
+        """
+        fusion_method = self.retrieval_config.get("fusion_method", "rrf")
+
+        if fusion_method == "rrf":
+            return self._rrf_combine(semantic_results, keyword_results, pseudocode_results)
+        return self._weighted_linear_combine(semantic_results, keyword_results, pseudocode_results)
+
+    def _rrf_combine(
+        self,
+        semantic_results: list[tuple[dict[str, Any], float]],
+        keyword_results: list[tuple[dict[str, Any], float]],
+        pseudocode_results: list[tuple[dict[str, Any], float]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Reciprocal Rank Fusion: score(d) = sum(1 / (k + rank_i)) across ranked lists.
+
+        RRF is parameter-free (k=60 is the standard constant), handles different
+        score scales gracefully, and consistently outperforms weighted linear fusion.
+        """
+        k = self.retrieval_config.get("rrf_k", 60)
+
+        # Build per-element metadata lookup and RRF scores
+        elements: dict[str, dict[str, Any]] = {}  # elem_id -> metadata
+        rrf_scores: dict[str, float] = {}  # elem_id -> total RRF score
+        component_scores: dict[str, dict[str, float]] = {}  # elem_id -> per-component
+
+        # Score each ranked list
+        ranked_lists = [
+            ("semantic", semantic_results),
+            ("keyword", keyword_results),
+        ]
+        if pseudocode_results:
+            ranked_lists.append(("pseudocode", pseudocode_results))
+
+        for list_name, ranked_list in ranked_lists:
+            for rank, (metadata, raw_score) in enumerate(ranked_list):
+                elem_id = metadata.get("id")
+                if not elem_id:
+                    continue
+
+                rrf_contribution = 1.0 / (k + rank + 1)
+
+                if elem_id not in elements:
+                    elements[elem_id] = metadata
+                    rrf_scores[elem_id] = 0.0
+                    component_scores[elem_id] = {
+                        "semantic_score": 0.0,
+                        "keyword_score": 0.0,
+                        "pseudocode_score": 0.0,
+                        "graph_score": 0.0,
+                    }
+
+                rrf_scores[elem_id] += rrf_contribution
+                component_scores[elem_id][f"{list_name}_score"] = rrf_contribution
+
+        # Build result list
+        results = []
+        for elem_id, metadata in elements.items():
+            result = {
+                "element": metadata,
+                "total_score": rrf_scores[elem_id],
+                **component_scores[elem_id],
+            }
+            results.append(result)
+
+        results.sort(key=lambda x: x["total_score"], reverse=True)
+        return results
+
+    def _weighted_linear_combine(
+        self,
+        semantic_results: list[tuple[dict[str, Any], float]],
+        keyword_results: list[tuple[dict[str, Any], float]],
+        pseudocode_results: list[tuple[dict[str, Any], float]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Original weighted linear combination (preserved for backwards compatibility)."""
+        combined = {}
         pseudocode_weight = 0.4 if pseudocode_results else 0.0
 
-        # Add semantic results
         for metadata, score in semantic_results:
             elem_id = metadata.get("id")
             if elem_id:
@@ -959,13 +1033,11 @@ class HybridRetriever:
                     "total_score": score * self.semantic_weight,
                 }
 
-        # Add pseudocode results (for implementation queries)
         if pseudocode_results:
             for metadata, score in pseudocode_results:
                 elem_id = metadata.get("id")
                 if elem_id:
                     pseudocode_contrib = score * pseudocode_weight
-
                     if elem_id in combined:
                         combined[elem_id]["pseudocode_score"] = pseudocode_contrib
                         combined[elem_id]["total_score"] += pseudocode_contrib
@@ -979,8 +1051,6 @@ class HybridRetriever:
                             "total_score": pseudocode_contrib,
                         }
 
-        # Add keyword results
-        # Normalize BM25 scores to 0-1 range
         if keyword_results:
             max_bm25 = max(score for _, score in keyword_results)
             if max_bm25 > 0:
@@ -988,7 +1058,6 @@ class HybridRetriever:
                     elem_id = metadata.get("id")
                     if elem_id:
                         normalized_score = (score / max_bm25) * self.keyword_weight
-
                         if elem_id in combined:
                             combined[elem_id]["keyword_score"] = normalized_score
                             combined[elem_id]["total_score"] += normalized_score
@@ -1002,10 +1071,8 @@ class HybridRetriever:
                                 "total_score": normalized_score,
                             }
 
-        # Convert to list and sort by total score
         results = list(combined.values())
         results.sort(key=lambda x: x["total_score"], reverse=True)
-
         return results
 
     def _expand_with_graph(
@@ -1070,29 +1137,14 @@ class HybridRetriever:
     def _rerank(
         self, query: str, results: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        """Re-rank results based on additional factors"""
-        # Simple re-ranking based on element type preferences
-        type_weights = {
-            "function": 1.2,  # Prefer functions
-            "class": 1.1,  # Then classes
-            "file": 0.9,  # Then files
-            "documentation": 0.8,  # Then docs
-        }
+        """Re-rank results using the configured reranker strategy."""
+        from .reranker import create_reranker
 
-        for result in results:
-            elem_type = result["element"].get("type", "")
-            weight = type_weights.get(elem_type, 1.0)
-            # Apply weight to all score components to maintain consistency
-            result["total_score"] *= weight
-            result["semantic_score"] *= weight
-            result["keyword_score"] *= weight
-            result["pseudocode_score"] *= weight
-            result["graph_score"] *= weight
+        if not hasattr(self, "_reranker"):
+            self._reranker = create_reranker(self.config)
 
-        # Sort by updated scores
-        results.sort(key=lambda x: x["total_score"], reverse=True)
-
-        return results
+        top_n = self.retrieval_config.get("rerank_top_n", 20)
+        return self._reranker.rerank(query, results, top_n=top_n)
 
     def _apply_filters(
         self, results: list[dict[str, Any]], filters: dict[str, Any]
@@ -1264,7 +1316,7 @@ class HybridRetriever:
         try:
             # Create/clear filtered vector store (separate from main vector store)
             if self.filtered_vector_store is None:
-                self.filtered_vector_store = VectorStore(self.config)
+                self.filtered_vector_store = create_vector_store(self.config)
                 self.filtered_vector_store.initialize(self.embedder.embedding_dim)
             else:
                 self.filtered_vector_store.clear()

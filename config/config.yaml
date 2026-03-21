@@ -58,13 +58,33 @@ parser:
 
 # Embedding Settings
 embedding:
-  model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # Multilingual support (470MB)
-  # model: "sentence-transformers/all-MiniLM-L6-v2"  # Faster download but English only (90MB)
-  # Alternative: "BAAI/bge-large-en-v1.5" for better quality
-  device: "auto"  # "auto" (recommended), "cuda", "mps", or "cpu"
-  batch_size: 32
-  max_seq_length: 512
+  provider: "local"  # "local" (SentenceTransformer), "ollama", or "api"
   normalize_embeddings: true
+  batch_size: 32
+  # matryoshka_dim: 256  # Truncate embeddings to N dims (~4% quality loss, 8x smaller)
+  # Supported values: 256, 512, 1024, or null (use full dimension)
+
+  # Local provider (sentence-transformers, on-device)
+  local:
+    model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # Multilingual (470MB)
+    # model: "sentence-transformers/all-MiniLM-L6-v2"  # English-only (90MB)
+    device: "auto"  # "auto" (recommended), "cuda", "mps", or "cpu"
+    max_seq_length: 512
+
+  # Ollama provider (HTTP API, for nomic-embed-code / Qwen3-Embedding)
+  ollama:
+    base_url: "http://localhost:11434"  # or OLLAMA_BASE_URL env
+    model: "nomic-embed-code"  # Code-specialized (recommended). Also: nomic-embed-text, Qwen3-Embedding
+    truncate: true
+    timeout: 120.0
+
+  # API provider (OpenAI-compatible REST, for voyage-code-3 etc.)
+  api:
+    base_url: "https://api.voyageai.com/v1"  # or EMBEDDING_API_BASE_URL env
+    model: "voyage-code-3"  # or EMBEDDING_API_MODEL env
+    api_key_env: "EMBEDDING_API_KEY"  # env var name holding the API key
+    timeout: 60.0
+    # input_type: "document"  # optional, provider-specific
 
 # Indexing Settings
 indexing:
@@ -82,23 +102,42 @@ indexing:
 
 # Vector Store Settings
 vector_store:
-  type: "faiss"  # faiss, chromadb, or qdrant
+  type: "faiss"  # "faiss" (default, no infra needed) or "qdrant" (production CRUD/filtering)
   distance_metric: "cosine"
   index_type: "HNSW"  # HNSW for fast approximate search
   ef_construction: 200
   ef_search: 50
   m: 16
 
-  # Persistence
+  # Persistence (FAISS backend)
   persist_directory: "./data/vector_store"
 
   # Performance optimization (for web interface)
   index_scan_cache_ttl: 30  # Cache scan results for N seconds (0 to disable)
   index_scan_sample_size: 100  # Sample size for file count estimation
 
+  # Qdrant backend settings
+  qdrant:
+    url: "http://localhost:6333"  # or QDRANT_URL env
+    collection_name: "fastcode"
+    overview_collection: "fastcode_overviews"
+    on_disk: true
+    hnsw_config:
+      m: 16
+      ef_construct: 200
+
 # Retrieval Settings
 retrieval:
-  # Hybrid search weights
+  # Fusion method: "rrf" (Reciprocal Rank Fusion, recommended) or "weighted_linear"
+  fusion_method: "rrf"
+  rrf_k: 60  # RRF constant (standard value, no tuning needed)
+
+  # Reranker: "type_weight" (default), "cross_encoder", or "none"
+  reranker: "type_weight"
+  # cross_encoder_model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  rerank_top_n: 20
+
+  # Hybrid search weights (used by weighted_linear fusion)
   semantic_weight: 0.5
   keyword_weight: 0.5
   graph_weight: 1
@@ -147,6 +186,13 @@ generation:
   temperature: 0.4
   max_tokens: 20000
 
+  # Tiered model routing — use fast model for simple queries, strong model for complex
+  routing:
+    enabled: false                    # Set to true to enable tiered routing
+    complexity_threshold: 40          # Queries with score < this use the fast model
+    fast_model_env: "FAST_MODEL"      # Env var name for fast/cheap model
+    strong_model_env: "MODEL"         # Env var name for strong model (default)
+
   # Context window management
   max_context_tokens: 200000
   reserve_tokens_for_response: 10000
@@ -165,6 +211,13 @@ graph:
   build_call_graph: true
   build_dependency_graph: true
   build_inheritance_graph: true
+  build_tests_graph: true          # TESTS edges: test functions → tested targets
+  build_co_change_graph: true      # FILE_CHANGES_WITH edges from git history
+  build_type_usage_graph: true     # USES_TYPE edges from type annotations
+  co_change_lookback: 100          # Number of commits to analyze for co-change
+  co_change_min_commits: 3         # Minimum co-changes to create an edge
+  community_detection: true        # Louvain community detection on combined graph
+  blast_radius_hops: 2             # Max hops for impact analysis traversal
   max_depth: 5
 
 # Agent Settings
@@ -190,6 +243,13 @@ cache:
   cache_embeddings: true
   cache_queries: false
   cache_directory: "./data/cache"
+
+  # Semantic query cache — matches similar queries by vector similarity
+  semantic_cache:
+    enabled: true
+    similarity_threshold: 0.90  # Cosine threshold for cache hits (0.85-0.95)
+    max_entries: 10000
+    ttl: 3600  # seconds
 
 # Evaluation Mode Settings
 evaluation:

@@ -19,6 +19,7 @@ default:
 
 ruff:
   stage: lint
+  allow_failure: false
   before_script:
     - pip install ruff
   script:
@@ -31,10 +32,17 @@ ruff:
 
 pytest:
   stage: test
+  allow_failure: false
   before_script:
     - pip install pytest pytest-asyncio pytest-cov -r requirements.txt
   script:
-    - python -m pytest tests/ -v --tb=short
+    # Smoke tests mock `fastcode`; measure only modules they execute (api, mcp_server).
+    # Align with [tool.coverage.report] fail_under in pyproject.toml.
+    - >
+      python -m pytest tests/ -v --tb=short
+      --cov=api --cov=mcp_server
+      --cov-report=term-missing
+      --cov-fail-under=30
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -43,6 +51,7 @@ pytest:
 
 mypy:
   stage: type-check
+  allow_failure: false
   before_script:
     - pip install mypy -r requirements.txt
   script:
@@ -55,6 +64,7 @@ mypy:
 
 security:
   stage: security
+  allow_failure: false
   before_script:
     - pip install bandit pip-audit
   script:

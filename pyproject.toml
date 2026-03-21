@@ -47,7 +47,8 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["fastcode"]
+# CI pytest uses --cov=api --cov=mcp_server (tests mock fastcode; full-package cov would be misleading).
+source = ["api", "mcp_server"]
 
 [tool.coverage.report]
 fail_under = 30

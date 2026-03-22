@@ -1,9 +1,19 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "fastcode-ebridge"
 version = "0.0.0"
 description = "FastCode submodule (e-Bridge); metadata for tooling only — install via requirements.txt"
 readme = "README.md"
 requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "pytest-cov", "httpx"]
+
+[tool.setuptools.packages.find]
+include = ["fastcode*", "evaluation*"]
 
 [tool.coverage.run]
 source = ["fastcode", "api", "mcp_server"]

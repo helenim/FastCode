@@ -93,3 +93,6 @@ association_agent.py
 accurate_agent.py
 # api.py
 */testcases/*
+# Hypothesis (property-based testing) cache
+.hypothesis/
+

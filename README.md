@@ -170,7 +170,7 @@ FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform be
 <summary><b>🐧 Linux Installation</b></summary>
 
 ### Prerequisites
-- Python 3.12 or higher
+- Python 3.11+
 - Git
 
 ### Step-by-Step Guide
@@ -228,7 +228,7 @@ FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform be
 <summary><b>🍎 macOS Installation</b></summary>
 
 ### Prerequisites
-- Python 3.12 or higher
+- Python 3.11+
 - Git
 
 ### Step-by-Step Guide
@@ -288,7 +288,7 @@ FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform be
 <summary><b>💻 Windows Installation</b></summary>
 
 ### Prerequisites
-- Python 3.12 or higher
+- Python 3.11+
 - Git
 
 ### Step-by-Step Guide

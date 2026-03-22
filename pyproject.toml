@@ -60,4 +60,4 @@ markers = [
 source = ["api", "mcp_server"]
 
 [tool.coverage.report]
-fail_under = 30
+fail_under = 50

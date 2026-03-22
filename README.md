@@ -22,6 +22,44 @@
 
 ---
 
+## e-Bridge monorepo / submodule
+
+If this directory is the **`2d-studio-ebridge-fastcode`** git submodule inside the e-Bridge workspace, use the parent repository’s clone instructions and run:
+
+```bash
+git submodule update --init --recursive
+cd 2d-studio-ebridge-fastcode
+```
+
+Operator and agent entry points: parent [README.md](../../README.md), workspace [AGENTS.md](../../AGENTS.md), and this submodule’s [AGENTS.md](AGENTS.md). The **Quick Start** below still shows the upstream-style standalone clone for comparison.
+
+---
+
+## Documentation map
+
+| Need | Where |
+|------|--------|
+| First run (pip / uv) | [Quick Start](#-quick-start) · [Installation](#-installation) |
+| Default ports | [Default ports](#default-ports-this-repository) |
+| REST / OpenAPI | [REST API](#rest-api) · [docs/API.md](docs/API.md) |
+| Docker + Nanobot + Feishu | [Nanobot + Feishu](#-nanobot--feishu-lark-integration-docker-deployment) · [`docker-compose.yml`](docker-compose.yml) |
+| MCP (Cursor / Claude) | [MCP Server](#mcp-server-use-in-cursor--claude-code--windsurf) |
+| Architecture ADRs (platform) | Parent [docs/adr/README.md](../../docs/adr/README.md) |
+
+---
+
+## Default ports (this repository)
+
+| Entrypoint | Default port (CLI) | Docker / Compose |
+|------------|-------------------|------------------|
+| Web UI (`web_app.py`) | **5777** | not exposed by default in `docker-compose.yml` |
+| REST API (`api.py`) | **8000** | **8001** (see `Dockerfile` / `docker-compose.yml`) |
+| Nanobot gateway | — | host **18791** → container **18790** |
+
+Override with `--port` when starting servers. OpenAPI docs: `http://<host>:<port>/docs` on the API process.
+
+---
+
 ## 🎯 Why FastCode?
 
 FastCode is a token-efficient framework for comprehensive code understanding and analysis: delivering **superior speed**, **exceptional accuracy**, and **cost-effectiveness** for large-scale codebases and software architectures.
@@ -153,10 +191,10 @@ cp env.example .env
 # Edit .env with your API keys
 
 # 4. Launch the Web UI
-python web_app.py --host 0.0.0.0 --port 5000
+python web_app.py --host 0.0.0.0 --port 5777
 ```
 
-Open http://localhost:5000 and start asking questions about your code! 🎉
+Open http://localhost:5777 and start asking questions about your code! 🎉
 
 ---
 
@@ -164,7 +202,7 @@ Open http://localhost:5000 and start asking questions about your code! 🎉
 
 FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform below:
 
-> **💡 Recommendation:** We recommend using [uv](https://github.com/astral-sh/uv) for faster and more reliable dependency installation.
+> **💡 Recommendation:** [uv](https://github.com/astral-sh/uv) is optional for faster local installs. **CI and this fork treat [`requirements.txt`](requirements.txt) as canonical**; there is no committed `uv.lock`.
 
 <details>
 <summary><b>🐧 Linux Installation</b></summary>
@@ -216,7 +254,7 @@ FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform be
 4. **Launch FastCode**
    ```bash
    # Web UI (Recommended)
-   python web_app.py --host 0.0.0.0 --port 5000
+   python web_app.py --host 0.0.0.0 --port 5777
 
    # Or use the CLI
    python main.py query --repo-path /path/to/your/repo --query "Your question here"
@@ -274,7 +312,7 @@ FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform be
 4. **Launch FastCode**
    ```bash
    # Web UI (Recommended)
-   python web_app.py --host 0.0.0.0 --port 5000
+   python web_app.py --host 0.0.0.0 --port 5777
 
    # Or use the CLI
    python main.py query --repo-path /path/to/your/repo --query "Your question here"
@@ -334,7 +372,7 @@ FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform be
 4. **Launch FastCode**
    ```cmd
    # Web UI (Recommended)
-   python web_app.py --host 0.0.0.0 --port 5000
+   python web_app.py --host 0.0.0.0 --port 5777
 
    # Or use the CLI
    python main.py query --repo-path C:\path\to\your\repo --query "Your question here"
@@ -358,10 +396,10 @@ The Web UI provides the most intuitive experience:
 
 1. **Launch the server:**
    ```bash
-   python web_app.py --host 0.0.0.0 --port 5000
+   python web_app.py --host 0.0.0.0 --port 5777
    ```
 
-2. **Open your browser:** Navigate to http://localhost:5000
+2. **Open your browser:** Navigate to http://localhost:5777
 
 3. **Load a repository:** Use the sidebar to index your codebase
 
@@ -397,6 +435,8 @@ python api.py --host 0.0.0.0 --port 8000
 ```
 
 The API provides all features available in the Web UI. Visit http://localhost:8000/docs for interactive API documentation.
+
+**e-Bridge / optional auth:** When the workspace package `ebridge_auth` is installed, `api.py` may enforce Keycloak-backed authentication on routes. If imports fail, the API runs without that layer. See the parent workspace security/auth documentation for deployment.
 
 **Key API Endpoints:**
 
@@ -772,7 +812,7 @@ MODEL=google/gemini-3-flash-preview
 NANOBOT_MODEL=minimax/minimax-m2.1
 ```
 
-The API key is automatically injected into the Nanobot container via `docker-compose.yml` environment variables — no need to duplicate it in `nanobot_config.json`.
+The **FastCode** container mounts `./.env` (API keys and models for the REST API). The **Nanobot** container mounts `nanobot_config.json` at `/home/appuser/.nanobot/config.json` for Feishu (and other channel) credentials and agent settings — configure LLM providers per [nanobot](nanobot/) docs as needed. Compose sets `FASTCODE_API_URL=http://fastcode:8001` so tools reach the API.
 
 #### 2. FastCode Core Configuration
 
@@ -838,29 +878,16 @@ Go to **Version Management** → Create a version → Submit for review (interna
 <details>
 <summary><b>Docker Compose Structure</b></summary>
 
-```yaml
-services:
-  fastcode:          # FastCode API (port 8001)
-    build: .
-    volumes:
-      - ./.env:/app/.env:ro
-      - ./config:/app/config:ro
-      - ./data:/app/data
-      - ./repos:/app/repos
+The **source of truth** is [`docker-compose.yml`](docker-compose.yml) in this directory (do not rely on stale YAML copied elsewhere).
 
-  nanobot:           # Nanobot Gateway (port 18791 → 18790)
-    build: ./nanobot
-    command: ["gateway"]
-    volumes:
-      - ./nanobot_config.json:/root/.nanobot/config.json:ro
-    environment:
-      - FASTCODE_API_URL=http://fastcode:8001
-      # API key and model injected from .env
-      - NANOBOT_PROVIDERS__OPENROUTER__API_KEY=${OPENAI_API_KEY}
-      - NANOBOT_AGENTS__DEFAULTS__MODEL=${NANOBOT_MODEL}
-    depends_on:
-      - fastcode
-```
+At a glance:
+
+| Service | Image build | Published ports | Notable mounts / env |
+|---------|-------------|-----------------|----------------------|
+| `fastcode` | `.` / `Dockerfile` | `8001:8001` | `./.env`, `./config`, `./data`, `./repos`, `./logs` |
+| `nanobot` | `./nanobot` | `18791:18790` | `nanobot_config.json` → `/home/appuser/.nanobot/config.json`; named volumes for workspace/sessions; `./repos` read-only; `FASTCODE_API_URL` |
+
+Nanobot runs as non-root (`appuser`); config path **must** stay aligned with [`nanobot/Dockerfile`](nanobot/Dockerfile).
 
 </details>
 

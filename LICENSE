@@ -1,0 +1,10 @@
+PROPRIETARY LICENSE
+
+Copyright (c) FastCode and e-Bridge contributors. All rights reserved.
+
+This software is proprietary. Redistribution, modification, or use except as
+expressly permitted in writing by the copyright holder is prohibited.
+
+Third-party components:
+- The `nanobot/` package and its vendored files are provided under the MIT
+  License — see `nanobot/LICENSE`.

@@ -106,8 +106,12 @@ class AgentTools:
                 if not is_dir:
                     try:
                         item_info["size"] = os.path.getsize(item_path)
-                    except Exception:
+                    except OSError as exc:
+                        self.logger.debug(
+                            "Could not stat size for %s: %s", item_path, exc
+                        )
                         item_info["size"] = 0
+                        item_info["size_error"] = str(exc)
 
                 result["contents"].append(item_info)
 

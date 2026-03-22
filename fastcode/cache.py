@@ -12,10 +12,98 @@ import os
 import pickle
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import numpy as np
-from diskcache import Cache as DiskCache
+
+
+class _PickleFileCache:
+    """File-backed key-value cache with TTL and optional total size limit.
+
+    Replaces the ``diskcache`` dependency (CVE surface in pip-audit). Values are
+    pickled; the cache directory must not be writable by untrusted parties.
+    """
+
+    def __init__(self, directory: str, size_limit: int | None = None) -> None:
+        self._root = Path(directory)
+        self._entries = self._root / "entries"
+        self._entries.mkdir(parents=True, exist_ok=True)
+        self._size_limit = size_limit
+
+    @staticmethod
+    def _path(entries: Path, key: str) -> Path:
+        h = hashlib.sha256(key.encode("utf-8", errors="replace")).hexdigest()
+        return entries / f"{h}.fcache"
+
+    def get(self, key: str) -> Any | None:
+        path = self._path(self._entries, key)
+        if not path.is_file():
+            return None
+        try:
+            with path.open("rb") as f:
+                payload = pickle.load(f)  # nosec B301
+            exp = payload.get("exp")
+            if exp is not None and time.time() > exp:
+                path.unlink(missing_ok=True)
+                return None
+            return payload.get("val")
+        except (OSError, pickle.PickleError, EOFError, KeyError):
+            path.unlink(missing_ok=True)
+            return None
+
+    def set(self, key: str, value: Any, expire: int | None = None) -> None:
+        if self._size_limit:
+            self._prune_to_limit()
+        exp = time.time() + expire if expire else None
+        path = self._path(self._entries, key)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        try:
+            with tmp.open("wb") as f:
+                pickle.dump({"exp": exp, "val": value, "key": key}, f, protocol=5)
+            tmp.replace(path)
+        except OSError:
+            tmp.unlink(missing_ok=True)
+            raise
+
+    def delete(self, key: str) -> bool:
+        path = self._path(self._entries, key)
+        if path.is_file():
+            path.unlink()
+            return True
+        return False
+
+    def clear(self) -> None:
+        for path in self._entries.glob("*.fcache"):
+            path.unlink(missing_ok=True)
+
+    def __len__(self) -> int:
+        return sum(1 for _ in self._entries.glob("*.fcache"))
+
+    def volume(self) -> int:
+        return sum(p.stat().st_size for p in self._entries.glob("*.fcache"))
+
+    def iterkeys(self) -> Iterator[str]:
+        for path in self._entries.glob("*.fcache"):
+            try:
+                with path.open("rb") as f:
+                    payload = pickle.load(f)  # nosec B301
+                k = payload.get("key")
+                if isinstance(k, str):
+                    yield k
+            except (OSError, pickle.PickleError, EOFError, KeyError):
+                continue
+
+    def _prune_to_limit(self) -> None:
+        if not self._size_limit or self.volume() <= self._size_limit:
+            return
+        files = sorted(
+            self._entries.glob("*.fcache"), key=lambda p: p.stat().st_mtime
+        )
+        target = int(self._size_limit * 0.85)
+        for path in files:
+            if self.volume() <= target:
+                break
+            path.unlink(missing_ok=True)
 
 
 class CacheManager:
@@ -50,7 +138,7 @@ class CacheManager:
         if self.backend == "disk":
             Path(self.cache_directory).mkdir(parents=True, exist_ok=True)
             max_size_bytes = self.max_size_mb * 1024 * 1024
-            self.cache = DiskCache(self.cache_directory, size_limit=max_size_bytes)
+            self.cache = _PickleFileCache(self.cache_directory, size_limit=max_size_bytes)
             self.logger.info(f"Initialized disk cache at {self.cache_directory}")
 
         elif self.backend == "redis":

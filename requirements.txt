@@ -46,7 +46,6 @@ pandas
 pathspec
 
 # Caching
-diskcache
 redis
 
 # MCP Server

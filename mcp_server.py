@@ -28,6 +28,7 @@ import logging
 import os
 import sys
 import uuid
+from typing import Any
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -182,7 +183,7 @@ def _ensure_repos_ready(repos: list[str], ctx=None) -> list[str]:
 MCP_SERVER_DESCRIPTION = (
     "Repo-level code understanding - ask questions about any codebase."
 )
-_fastmcp_kwargs = {}
+_fastmcp_kwargs: dict[str, Any] = {}
 try:
     # Backward compatibility: older mcp versions do not accept `description`.
     if "description" in inspect.signature(FastMCP.__init__).parameters:
@@ -432,6 +433,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.transport in ("sse", "streamable-http"):
-        mcp.run(transport=args.transport, mount_path=f"/mcp")
+        mcp.run(transport=args.transport, mount_path="/mcp")
     else:
         mcp.run(transport="stdio")

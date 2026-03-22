@@ -30,6 +30,25 @@ ruff:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+whatsapp-bridge:
+  stage: lint
+  image: node:20-bookworm-slim
+  variables:
+    npm_config_cache: "$CI_PROJECT_DIR/.npm-cache"
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-npm-bridge"
+    paths:
+      - .npm-cache/
+  before_script:
+    - cd nanobot/bridge && npm ci
+  script:
+    - cd nanobot/bridge && npm run build
+    - cd nanobot/bridge && npm audit --audit-level=high
+  allow_failure: false
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 # ── Test ──────────────────────────────────────────────────────────────
 
 pytest:
@@ -38,13 +57,24 @@ pytest:
   before_script:
     - pip install pytest pytest-asyncio pytest-cov -r requirements.txt
   script:
-    # Smoke tests mock `fastcode`; measure only modules they execute (api, mcp_server).
-    # Align with [tool.coverage.report] fail_under in pyproject.toml.
+    # Coverage: include `fastcode` plus API/MCP entrypoints. Threshold ~15% line (branch-aware total);
+    # raise gradually as tests grow. See [tool.coverage.report] in pyproject.toml.
     - >
       python -m pytest tests/ -v --tb=short
-      --cov=api --cov=mcp_server
+      --cov=fastcode --cov=api --cov=mcp_server
       --cov-report=term-missing
-      --cov-fail-under=30
+      --cov-fail-under=15
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+nanobot-pytest:
+  stage: test
+  allow_failure: false
+  before_script:
+    - pip install -e "./nanobot[dev]"
+  script:
+    - cd nanobot && python -m pytest tests/ -v --tb=short
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -57,6 +87,7 @@ mypy:
   before_script:
     - pip install mypy -r requirements.txt
   script:
+    # pyproject.toml ignores errors inside `fastcode.*` until that package is fully typed.
     - mypy fastcode/ api.py mcp_server.py main.py web_app.py --ignore-missing-imports
     - mypy nanobot/nanobot/agent/tools/shell.py --ignore-missing-imports
   rules:

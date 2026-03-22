@@ -25,8 +25,7 @@ _QdrantClient = None
 def _import_qdrant():
     global _qdrant_models, _QdrantClient
     if _QdrantClient is None:
-        from qdrant_client import QdrantClient
-        from qdrant_client import models
+        from qdrant_client import QdrantClient, models
 
         _QdrantClient = QdrantClient
         _qdrant_models = models
@@ -121,7 +120,7 @@ class QdrantVectorStore:
 
         # Build points with UUIDs
         points = []
-        for vec, meta in zip(vectors, metadata):
+        for vec, meta in zip(vectors, metadata, strict=True):
             point_id = meta.get("id") or str(uuid.uuid4())
             points.append(
                 models.PointStruct(
@@ -243,7 +242,6 @@ class QdrantVectorStore:
         # Scroll through unique repo_name values
         try:
             client = self._get_client()
-            _, models = _import_qdrant()
 
             # Use scroll with a group-by-like approach: get a sample and extract unique names
             results, _ = client.scroll(

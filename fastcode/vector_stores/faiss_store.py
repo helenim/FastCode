@@ -7,7 +7,6 @@ Adds the delete_by_repo and delete_by_files methods for interface compatibility.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from ..vector_store import VectorStore
 

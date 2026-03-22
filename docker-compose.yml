@@ -16,7 +16,7 @@ services:
     ports:
       - "8001:8001"
     volumes:
-      # Configuration
+      # Configuration — use env.example as a template; keep real .env out of git (see .gitignore).
       - ./.env:/app/.env:ro
       - ./config:/app/config:ro
 

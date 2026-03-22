@@ -405,7 +405,8 @@ async def upload_repository_zip(file: UploadFile = File(...)):
     """Upload and extract repository ZIP file"""
     fastcode = _ensure_fastcode_initialized()
 
-    if not file.filename.endswith(".zip"):
+    filename = file.filename or "upload.zip"
+    if not filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only ZIP files are supported")
 
     file.file.seek(0, 2)
@@ -420,7 +421,7 @@ async def upload_repository_zip(file: UploadFile = File(...)):
         )
 
     try:
-        repo_name = file.filename.rsplit(".", 1)[0]
+        repo_name = filename.rsplit(".", 1)[0]
         for suffix in ["-main", "-master", "_main", "_master"]:
             if repo_name.endswith(suffix):
                 repo_name = repo_name[: -len(suffix)]
@@ -435,9 +436,9 @@ async def upload_repository_zip(file: UploadFile = File(...)):
             fastcode.loader._backup_existing_repo(str(repo_path))
 
         temp_dir = tempfile.mkdtemp(prefix="fastcode_upload_")
-        zip_path = Path(temp_dir) / file.filename
+        zip_path = Path(temp_dir) / filename
 
-        logger.info(f"Saving uploaded ZIP file: {file.filename} ({file_size} bytes)")
+        logger.info(f"Saving uploaded ZIP file: {filename} ({file_size} bytes)")
 
         with open(zip_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -469,7 +470,7 @@ async def upload_repository_zip(file: UploadFile = File(...)):
 
         return {
             "status": "success",
-            "message": f"ZIP file '{file.filename}' uploaded and extracted to repos/{repo_name}",
+            "message": f"ZIP file '{filename}' uploaded and extracted to repos/{repo_name}",
             "repo_info": fastcode.repo_info,
             "repo_path": str(repo_path),
         }

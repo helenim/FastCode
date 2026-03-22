@@ -9,7 +9,7 @@ Supports:
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class TypeWeightReranker:
     This is the original FastCode reranking logic, extracted into its own class.
     """
 
-    DEFAULT_WEIGHTS = {
+    DEFAULT_WEIGHTS: ClassVar[dict[str, float]] = {
         "function": 1.2,
         "class": 1.1,
         "file": 0.9,
@@ -123,7 +123,7 @@ class CrossEncoderReranker:
         scores = self._model.predict(pairs)
 
         # Update total_score with cross-encoder score
-        for result, ce_score in zip(to_rerank, scores):
+        for result, ce_score in zip(to_rerank, scores, strict=True):
             result["cross_encoder_score"] = float(ce_score)
             # Blend: keep 30% of original score, 70% cross-encoder
             result["total_score"] = 0.3 * result["total_score"] + 0.7 * float(ce_score)

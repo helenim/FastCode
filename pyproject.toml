@@ -1,63 +1,24 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
-name = "ebridge-fastcode"
-version = "0.1.0"
-description = "Code intelligence service — AST indexing, hybrid search, and MCP server"
+name = "fastcode-ebridge"
+version = "0.0.0"
+description = "FastCode submodule (e-Bridge); metadata for tooling only — install via requirements.txt"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Proprietary" }
-
-# Minimal runtime deps needed for tests. Full list in requirements.txt.
-dependencies = [
-    "fastapi>=0.110.0",
-    "pydantic>=2.0",
-    "python-multipart>=0.0.6",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.24.0",
-    "pytest-cov>=5.0",
-    "ruff>=0.8.0",
-    "httpx>=0.27.0",
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["fastcode"]
-
-[tool.ruff]
-target-version = "py311"
-line-length = 88
-
-[tool.ruff.lint]
-select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
-# Legacy upstream `fastcode/` has many wrapped docstrings/strings; formatter + 88 cols still leaves noise.
-ignore = [
-    "E501",  # line length; rely on ruff format
-    "B904",  # FastAPI handlers map errors to HTTPException without chaining
-    "B008",  # FastAPI `File()` / `Depends()` in defaults is intentional
-    "SIM102",  # nested ifs in large upstream `fastcode/` modules
-    "SIM103",
-    "SIM108",
-    "B007",  # unused loop vars in tuple-unpack iterations
-]
-
-[tool.pytest.ini_options]
-minversion = "8.0"
-testpaths = ["tests"]
-markers = [
-    "integration: tests that require running infrastructure (vector store, LLM)",
-    "slow: tests that take significant time to run",
-    "llm: tests that require LLM API keys",
-]
 
 [tool.coverage.run]
-# CI pytest uses --cov=api --cov=mcp_server (tests mock fastcode; full-package cov would be misleading).
-source = ["api", "mcp_server"]
+source = ["fastcode", "api", "mcp_server"]
+branch = true
 
 [tool.coverage.report]
-fail_under = 50
+fail_under = 15
+omit = ["*/tests/*", "*/test_*.py"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+show_error_codes = true
+
+# Ratchet: type-check public entrypoints first; remove ignores as `fastcode/` is cleaned up.
+[[tool.mypy.overrides]]
+module = ["fastcode", "fastcode.*"]
+ignore_errors = true

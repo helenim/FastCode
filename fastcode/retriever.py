@@ -18,6 +18,7 @@ from .iterative_agent import IterativeAgent
 from .query_processor import ProcessedQuery
 from .repo_selector import RepositorySelector
 from .utils import ensure_dir
+from .vector_store import VectorStore
 from .vector_stores import create_vector_store
 
 

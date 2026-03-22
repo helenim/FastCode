@@ -76,6 +76,7 @@ images_exist() {
     if ! out=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null); then
         return 1
     fi
+    # grep returns 1 when count is 0; || true keeps set -e from aborting this helper.
     fc_img=$(grep -c "fastcode" <<<"$out" || true)
     nb_img=$(grep -c "nanobot" <<<"$out" || true)
     [ "${fc_img:-0}" -gt 0 ] && [ "${nb_img:-0}" -gt 0 ]

@@ -28,6 +28,10 @@ venv/
 ENV/
 env/
 .venv
+.v
+
+# JavaScript (nanobot bridge)
+node_modules/
 
 # IDEs
 .vscode/

@@ -32,7 +32,7 @@ def load_config(config_path: Path | None = None) -> Config:
         Loaded configuration object.
     """
     path = config_path or get_config_path()
-    
+
     if path.exists():
         try:
             with open(path) as f:
@@ -45,7 +45,7 @@ def load_config(config_path: Path | None = None) -> Config:
                 path,
                 e,
             )
-    
+
     return Config()
 
 
@@ -59,11 +59,11 @@ def save_config(config: Config, config_path: Path | None = None) -> None:
     """
     path = config_path or get_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Convert to camelCase format
     data = config.model_dump()
     data = convert_to_camel(data)
-    
+
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 

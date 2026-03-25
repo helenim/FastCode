@@ -2352,7 +2352,7 @@ If continuing (confidence < {self.confidence_threshold} and budget available):
         # Select elements until budget is reached
         selected = []
         total_lines = 0
-        for score, elem_data in scored_elements:
+        for _score, elem_data in scored_elements:
             elem = elem_data.get("element", {})
             start = elem.get("start_line", 0)
             end = elem.get("end_line", 0)
@@ -2421,10 +2421,7 @@ If continuing (confidence < {self.confidence_threshold} and budget available):
 
         # Factor 5: Selection granularity bonus
         granularity = elem_data.get("selection_granularity", "file")
-        if granularity in ["class", "function"]:
-            granularity_bonus = 0.15  # Precise selections are valuable
-        else:
-            granularity_bonus = 0.0
+        granularity_bonus = 0.15 if granularity in ["class", "function"] else 0.0
 
         # Combine factors
         priority_score = (
@@ -2592,7 +2589,7 @@ If continuing (confidence < {self.confidence_threshold} and budget available):
 
         # Step 3: Within each file, remove contained elements
         final_results = []
-        for key, group in file_groups.items():
+        for _key, group in file_groups.items():
             if len(group) == 1:
                 final_results.extend(group)
                 continue
@@ -3918,7 +3915,7 @@ If continuing (confidence < {self.confidence_threshold} and budget available):
         # Process each file group
         deduplicated = []
 
-        for key, group in file_groups.items():
+        for _key, group in file_groups.items():
             # Check if there's a file-level result
             has_file_level = any(
                 r.get("element", {}).get("type") == "file" for r in group

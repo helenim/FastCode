@@ -5,8 +5,8 @@ import pytest
 from fastcode.reranker import (
     CrossEncoderReranker,
     TypeWeightReranker,
-    create_reranker,
     _element_to_text,
+    create_reranker,
 )
 
 
@@ -113,7 +113,7 @@ class TestRRFCombine:
         results2 = retriever._rrf_combine(semantic2, [])
 
         # Scores should be identical (rank-based)
-        for r1, r2 in zip(results1, results2):
+        for r1, r2 in zip(results1, results2, strict=True):
             assert r1["total_score"] == pytest.approx(r2["total_score"])
 
     def test_weighted_linear_fallback(self):

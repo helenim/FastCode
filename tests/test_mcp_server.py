@@ -145,9 +145,11 @@ def test_is_repo_indexed_false_when_index_files_missing():
         fc = MagicMock()
         fc.vector_store.persist_dir = "/data/indexes"
 
-        with patch.object(mcp_server, "_get_fastcode", return_value=fc):
-            with patch.object(mcp_server.os.path, "exists", return_value=False):
-                assert mcp_server._is_repo_indexed("missing") is False
+        with (
+            patch.object(mcp_server, "_get_fastcode", return_value=fc),
+            patch.object(mcp_server.os.path, "exists", return_value=False),
+        ):
+            assert mcp_server._is_repo_indexed("missing") is False
 
 
 def test_is_repo_indexed_true_when_faiss_and_metadata_exist():
@@ -175,9 +177,11 @@ def test_is_repo_indexed_true_when_faiss_and_metadata_exist():
         def _exists(path: str) -> bool:
             return path.endswith("myrepo.faiss") or path.endswith("myrepo_metadata.pkl")
 
-        with patch.object(mcp_server, "_get_fastcode", return_value=fc):
-            with patch.object(mcp_server.os.path, "exists", side_effect=_exists):
-                assert mcp_server._is_repo_indexed("myrepo") is True
+        with (
+            patch.object(mcp_server, "_get_fastcode", return_value=fc),
+            patch.object(mcp_server.os.path, "exists", side_effect=_exists),
+        ):
+            assert mcp_server._is_repo_indexed("myrepo") is True
 
 
 def test_ensure_repos_ready_skips_clone_when_already_indexed():
@@ -205,11 +209,13 @@ def test_ensure_repos_ready_skips_clone_when_already_indexed():
         fc.loader = MagicMock()
         fc.loader.ignore_patterns = []
 
-        with patch.object(mcp_server, "_get_fastcode", return_value=fc):
-            with patch.object(mcp_server, "_is_repo_indexed", return_value=True):
-                ready = mcp_server._ensure_repos_ready(
-                    ["https://github.com/example/demo"],
-                )
+        with (
+            patch.object(mcp_server, "_get_fastcode", return_value=fc),
+            patch.object(mcp_server, "_is_repo_indexed", return_value=True),
+        ):
+            ready = mcp_server._ensure_repos_ready(
+                ["https://github.com/example/demo"],
+            )
 
         assert ready == ["repo-from-url"]
         fc.load_repository.assert_not_called()

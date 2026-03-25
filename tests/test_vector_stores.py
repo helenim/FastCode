@@ -1,7 +1,6 @@
 """Tests for vector store abstraction and factory."""
 
 import numpy as np
-import pytest
 
 from fastcode.vector_stores.factory import create_vector_store
 from fastcode.vector_stores.faiss_store import FaissVectorStore

@@ -1,8 +1,6 @@
 """Tests for Phase 8: Incremental indexing via git diff."""
 
-import json
 import os
-import tempfile
 
 import pytest
 
@@ -70,7 +68,7 @@ class TestIncrementalIndexingIntegration:
 
     def test_incremental_detects_no_changes(self, git_repo, tmp_path):
         """When HEAD hasn't changed, incremental returns empty."""
-        repo_path, repo = git_repo
+        _repo_path, repo = git_repo
         head_sha = repo.head.commit.hexsha
 
         meta_path = str(tmp_path / "vs" / "test_incremental_meta.json")

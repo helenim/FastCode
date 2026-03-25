@@ -1,6 +1,5 @@
 """Tests for Phase 5: Graph schema expansion (tests, co-change, type usage graphs)."""
 
-import pytest
 
 from fastcode.graph_builder import CodeGraphBuilder
 from fastcode.indexer import CodeElement

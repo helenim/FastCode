@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -266,8 +266,8 @@ class EvaluationRunner:
             f"Evaluation Report: {report.dataset_name}",
             f"{'=' * 50}",
             f"Queries evaluated: {report.num_queries}",
-            f"",
-            f"Aggregate Metrics:",
+            "",
+            "Aggregate Metrics:",
             f"  NDCG@5:              {report.mean_ndcg_at_5:.4f}",
             f"  NDCG@10:             {report.mean_ndcg_at_10:.4f}",
             f"  MRR:                 {report.mean_mrr:.4f}",

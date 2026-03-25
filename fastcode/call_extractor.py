@@ -514,17 +514,8 @@ class CallExtractor:
         """
         call_name = call_info["call_name"]
 
-        # Filter out built-in functions
-        if call_name in self._builtin_functions:
-            return True
-
-        # Filter out calls to self/cls for method calls
-        # REMOVED: Allow self/cls calls to be processed for graph construction
-        # if call_info.get('base_object') in ['self', 'cls']:
-        #     return True
-
-        # Could add more filtering logic here
-        return False
+        # Filter out built-in functions (more filters can be added here).
+        return call_name in self._builtin_functions
 
     def get_extraction_stats(
         self, total_calls: int, filtered_calls: int

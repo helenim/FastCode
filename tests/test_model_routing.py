@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from fastcode.llm_utils import select_model_for_complexity
 from fastcode.query_processor import QueryProcessor
 

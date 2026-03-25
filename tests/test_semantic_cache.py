@@ -1,7 +1,6 @@
 """Tests for the SemanticCache (vector-similarity query caching)."""
 
 import numpy as np
-import pytest
 
 from fastcode.cache import SemanticCache
 

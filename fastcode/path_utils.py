@@ -124,16 +124,9 @@ def is_valid_python_file(file_path: str) -> bool:
     Returns:
         True if it's a valid Python file, False otherwise
     """
-    # Check file extension
     if not file_path.endswith(".py"):
         return False
-
-    # Check if it's a file (not directory)
-    if not os.path.isfile(file_path):
-        return False
-
-    # Additional checks can be added here (e.g., file size, readable, etc.)
-    return True
+    return os.path.isfile(file_path)
 
 
 def normalize_repo_root(repo_root: str) -> str:

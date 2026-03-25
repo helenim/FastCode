@@ -1,6 +1,5 @@
 """Tests for Phase 11: Graph-Enhanced RAG — community detection and blast radius."""
 
-import pytest
 
 from fastcode.graph_builder import CodeGraphBuilder
 from fastcode.indexer import CodeElement

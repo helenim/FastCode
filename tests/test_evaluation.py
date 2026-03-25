@@ -1,8 +1,6 @@
 """Tests for the evaluation pipeline — metrics, golden datasets, and runner."""
 
 import json
-import math
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -16,7 +14,6 @@ from evaluation.metrics import (
     compute_recall_at_k,
 )
 from evaluation.runner import EvaluationRunner
-
 
 # -- Fixtures --
 

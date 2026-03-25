@@ -15,6 +15,15 @@ dev = ["pytest", "pytest-asyncio", "pytest-cov", "httpx"]
 [tool.setuptools.packages.find]
 include = ["fastcode*", "evaluation*"]
 
+[tool.ruff]
+extend = "../config/ruff-base.toml"
+line-length = 88
+target-version = "py311"
+extend-exclude = ["nanobot", "vendor", ".agent"]
+
+[tool.ruff.lint]
+ignore = ["B904", "SIM102", "B008"]
+
 [tool.coverage.run]
 source = ["fastcode", "api", "mcp_server"]
 branch = true

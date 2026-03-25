@@ -60,8 +60,8 @@ class ModuleResolver:
         # Split current module path into components
         current_parts = current_module_path.split(".")
 
-        # Determine how many levels to strip
-        if is_package:
+        # Determine how many levels to strip (branch semantics differ; keep explicit).
+        if is_package:  # noqa: SIM108
             # If we are in __init__.py:
             # level=1 (from .) means "current package" -> strip 0
             # level=2 (from ..) means "parent package" -> strip 1

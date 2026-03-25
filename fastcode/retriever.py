@@ -979,7 +979,7 @@ class HybridRetriever:
             ranked_lists.append(("pseudocode", pseudocode_results))
 
         for list_name, ranked_list in ranked_lists:
-            for rank, (metadata, raw_score) in enumerate(ranked_list):
+            for rank, (metadata, _raw_score) in enumerate(ranked_list):
                 elem_id = metadata.get("id")
                 if not elem_id:
                     continue

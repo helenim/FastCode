@@ -9,6 +9,11 @@ description = "FastCode submodule (e-Bridge); metadata for tooling only — inst
 readme = "README.md"
 requires-python = ">=3.11"
 
+dependencies = [
+    # Shared workspace contracts (Keycloak auth for MCP server)
+    "ebridge-shared[auth]",
+]
+
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio", "pytest-cov", "httpx"]
 

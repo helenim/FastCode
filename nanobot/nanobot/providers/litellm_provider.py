@@ -99,6 +99,39 @@ class LiteLLMProvider(LLMProvider):
                     kwargs.update(overrides)
                     return
 
+    @staticmethod
+    def _is_anthropic_model(model: str) -> bool:
+        """Return True when the resolved model targets Anthropic."""
+        model_lower = model.lower()
+        return "claude" in model_lower or model_lower.startswith("anthropic/")
+
+    @staticmethod
+    def _inject_cache_control(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Add cache_control breakpoint to system message content blocks.
+
+        Converts the system message's plain-string content into structured
+        content blocks with ``cache_control: {"type": "ephemeral"}`` on the
+        last block.  Non-system messages are passed through unchanged.
+        """
+        result: list[dict[str, Any]] = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                content = msg.get("content", "")
+                if isinstance(content, str):
+                    result.append({
+                        "role": "system",
+                        "content": [{
+                            "type": "text",
+                            "text": content,
+                            "cache_control": {"type": "ephemeral"},
+                        }],
+                    })
+                else:
+                    result.append(msg)
+            else:
+                result.append(msg)
+        return result
+
     async def chat(
         self,
         messages: list[dict[str, Any]],
@@ -144,6 +177,11 @@ class LiteLLMProvider(LLMProvider):
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
+        # Inject cache_control breakpoints for Anthropic models to enable
+        # provider-level prompt caching (system prompt prefix cached at 0.1x cost).
+        if self._is_anthropic_model(model):
+            kwargs["messages"] = self._inject_cache_control(kwargs["messages"])
+
         try:
             response = await acompletion(**kwargs)
             return self._parse_response(response)
@@ -183,6 +221,20 @@ class LiteLLMProvider(LLMProvider):
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens,
             }
+            # Provider-level cache metrics (Anthropic)
+            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            cache_write = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+            if cache_read:
+                usage["cache_read_input_tokens"] = cache_read
+            if cache_write:
+                usage["cache_creation_input_tokens"] = cache_write
+            # Provider-level cache metrics (OpenAI) — only if Anthropic fields absent
+            elif not cache_read:
+                ptd = getattr(response.usage, "prompt_tokens_details", None)
+                if ptd:
+                    cached = getattr(ptd, "cached_tokens", 0) or 0
+                    if cached:
+                        usage["cache_read_input_tokens"] = cached
 
         reasoning_content = getattr(message, "reasoning_content", None)
 

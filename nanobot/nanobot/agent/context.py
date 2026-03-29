@@ -3,6 +3,7 @@
 import base64
 import mimetypes
 import platform
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -71,9 +72,13 @@ Skills with available="false" need dependencies installed first - you can try in
         return "\n\n---\n\n".join(parts)
 
     def _get_identity(self) -> str:
-        """Get the core identity section."""
-        from datetime import datetime
-        now = datetime.now().strftime("%Y-%m-%d %H:%M (%A)")
+        """Get the core identity section.
+
+        The timestamp is placed at the end of the identity block (after all
+        stable content) so that provider-level prompt caching can cache the
+        stable prefix.  Moving it earlier would invalidate the cache every
+        minute.
+        """
         workspace_path = str(self.workspace.expanduser().resolve())
         system = platform.system()
         runtime = f"{'macOS' if system == 'Darwin' else system} {platform.machine()}, Python {platform.python_version()}"
@@ -86,9 +91,6 @@ You are nanobot, a helpful AI assistant. You have access to tools that allow you
 - Search the web and fetch web pages
 - Send messages to users on chat channels
 - Spawn subagents for complex background tasks
-
-## Current Time
-{now}
 
 ## Runtime
 {runtime}
@@ -143,17 +145,29 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"""
         """
         messages = []
 
-        # System prompt
+        # System prompt (stable content only — no timestamps or session IDs
+        # so provider-level prompt caching can cache the prefix).
         system_prompt = self.build_system_prompt(skill_names)
-        if channel and chat_id:
-            system_prompt += f"\n\n## Current Session\nChannel: {channel}\nChat ID: {chat_id}"
         messages.append({"role": "system", "content": system_prompt})
 
         # History
         messages.extend(history)
 
-        # Current message (with optional image attachments)
+        # Current message with dynamic context prepended (timestamp, session).
+        # These are placed in the user message rather than the system prompt
+        # because they change per-request and would invalidate the cache.
+        now = datetime.now().strftime("%Y-%m-%d %H:%M (%A)")
+        dynamic_prefix_parts = [f"[Current time: {now}]"]
+        if channel and chat_id:
+            dynamic_prefix_parts.append(f"[Channel: {channel}, Chat ID: {chat_id}]")
+        dynamic_prefix = " ".join(dynamic_prefix_parts)
+
         user_content = self._build_user_content(current_message, media)
+        if isinstance(user_content, str):
+            user_content = f"{dynamic_prefix}\n\n{user_content}"
+        else:
+            # Multi-modal content (list of blocks): prepend text block
+            user_content = [{"type": "text", "text": dynamic_prefix}, *user_content]
         messages.append({"role": "user", "content": user_content})
 
         return messages

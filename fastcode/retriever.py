@@ -6,10 +6,35 @@ Enhanced with LLM-processed query support
 import logging
 import os
 import pickle
+import re
 from typing import Any
 
 import numpy as np
 from rank_bm25 import BM25Okapi
+
+# Code-aware tokenizer: splits on whitespace, camelCase, snake_case, and dots
+_CAMEL_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+_SPLIT_RE = re.compile(r"[_.\-/\\]+")
+
+
+def _code_tokenize(text: str) -> list[str]:
+    """Tokenize text with code-awareness: splits camelCase, snake_case, dots.
+
+    Example: 'getUserById' → ['get', 'user', 'by', 'id']
+             'get_user_by_id' → ['get', 'user', 'by', 'id']
+             'HTTPClient.send_request' → ['http', 'client', 'send', 'request']
+    """
+    tokens = []
+    for word in text.lower().split():
+        # Split on underscores, dots, dashes, slashes
+        parts = _SPLIT_RE.split(word)
+        for part in parts:
+            if not part:
+                continue
+            # Split camelCase
+            sub_parts = _CAMEL_RE.sub(" ", part).split()
+            tokens.extend(t for t in sub_parts if len(t) > 1)
+    return tokens
 
 from .embedder import CodeEmbedder
 from .graph_builder import CodeGraphBuilder
@@ -154,8 +179,8 @@ class HybridRetriever:
                 text_parts.append(elem.code[:1000])  # First 1000 chars
 
             text = " ".join(text_parts)
-            # Tokenize (simple whitespace tokenization)
-            tokens = text.lower().split()
+            # Tokenize with code-awareness (camelCase, snake_case)
+            tokens = _code_tokenize(text)
             self.full_bm25_corpus.append(tokens)
 
         self.full_bm25 = BM25Okapi(self.full_bm25_corpus)
@@ -196,7 +221,7 @@ class HybridRetriever:
             ]
 
             text = " ".join(text_parts)
-            tokens = text.lower().split()
+            tokens = _code_tokenize(text)
 
             self.repo_overview_bm25_corpus.append(tokens)
             self.repo_overview_names.append(repo_name)
@@ -491,12 +516,12 @@ class HybridRetriever:
             query_tokens: list[str] = []
             if keywords:
                 for kw in keywords:
-                    query_tokens.extend(kw.lower().split())
+                    query_tokens.extend(_code_tokenize(kw))
             elif isinstance(query, list):
                 for part in query:
-                    query_tokens.extend(part.lower().split())
+                    query_tokens.extend(_code_tokenize(part))
             else:
-                query_tokens = query.lower().split()
+                query_tokens = _code_tokenize(query)
             scores = self.repo_overview_bm25.get_scores(query_tokens)
             # Get repository overview results from separate index
             for idx, score in enumerate(scores):
@@ -891,8 +916,8 @@ class HybridRetriever:
         else:
             return []
 
-        # Tokenize query
-        query_tokens = query.lower().split()
+        # Tokenize query with code-awareness
+        query_tokens = _code_tokenize(query)
 
         # Get BM25 scores
         scores = bm25_index.get_scores(query_tokens)

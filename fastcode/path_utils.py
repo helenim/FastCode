@@ -256,15 +256,28 @@ class PathUtils:
             True if path is safe, False otherwise
         """
         try:
+            # Reject null bytes — they can truncate paths in C-level syscalls
+            if "\x00" in path:
+                self.logger.warning(f"Null byte in path rejected: {path!r}")
+                return False
+
             resolved = self.resolve_path(path)
             if resolved is None:
                 # Also check if the joined path would be safe (even if doesn't exist yet)
                 abs_path = os.path.abspath(os.path.join(self.repo_root, path))
-                return abs_path.startswith(self.repo_root)
-            return resolved.startswith(self.repo_root)
+                return self._is_within_root(abs_path)
+            return self._is_within_root(resolved)
         except Exception as e:
             self.logger.warning(f"Path security check failed for {path}: {e}")
             return False
+
+    def _is_within_root(self, abs_path: str) -> bool:
+        """Check that abs_path is exactly repo_root or a child of it.
+
+        Uses an os.sep-aware check to prevent prefix-collision attacks
+        (e.g. /tmp/repo_evil matching /tmp/repo via startswith).
+        """
+        return abs_path == self.repo_root or abs_path.startswith(self.repo_root + os.sep)
 
     def detect_repo_name_from_path(self, file_path: str, known_repos: set[str]) -> str:
         """

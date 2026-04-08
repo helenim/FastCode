@@ -140,7 +140,7 @@ retrieval:
   # Hybrid search weights (used by weighted_linear fusion)
   semantic_weight: 0.5
   keyword_weight: 0.5
-  graph_weight: 1
+  graph_weight: 0.5
 
   # Filters
   min_similarity: 0.15

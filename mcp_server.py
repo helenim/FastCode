@@ -131,6 +131,25 @@ def _apply_forced_env_excludes(fc) -> None:
         logger.info(f"Added forced ignore patterns: {added}")
 
 
+def _is_path_allowed(abs_path: str) -> bool:
+    """Check whether a local path is under an allowed root.
+
+    When FASTCODE_ALLOWED_PATHS is set (comma-separated list of directories),
+    only local paths under those roots are permitted. When unset, all local
+    paths are allowed (backwards-compatible).
+    """
+    allowed_raw = os.getenv("FASTCODE_ALLOWED_PATHS")
+    if not allowed_raw:
+        return True  # no allowlist configured
+    allowed_roots = [
+        os.path.abspath(p.strip()) for p in allowed_raw.split(",") if p.strip()
+    ]
+    return any(
+        abs_path == root or abs_path.startswith(root + os.sep)
+        for root in allowed_roots
+    )
+
+
 def _ensure_repos_ready(repos: list[str], ctx=None) -> list[str]:
     """
     For each repo source string:
@@ -162,8 +181,13 @@ def _ensure_repos_ready(repos: list[str], ctx=None) -> list[str]:
             logger.info(f"Cloning {source} …")
             fc.load_repository(source, is_url=True)
         else:
-            # Local path
+            # Local path — enforce allowlist
             abs_path = os.path.abspath(source)
+            if not _is_path_allowed(abs_path):
+                logger.error(
+                    f"Local path rejected by FASTCODE_ALLOWED_PATHS: {abs_path}"
+                )
+                continue
             if not os.path.isdir(abs_path):
                 logger.error(f"Local path does not exist: {abs_path}")
                 continue
@@ -223,6 +247,14 @@ def code_qa(
     Returns:
         The answer to your question, with source references.
     """
+    # Input validation
+    if not repos:
+        return "Error: 'repos' list must not be empty."
+    if len(repos) > 20:
+        return "Error: Too many repositories (max 20)."
+    if len(question) > 50_000:
+        return "Error: Question too long (max 50,000 characters)."
+
     fc = _get_fastcode()
 
     # 1. Ensure all repos are indexed

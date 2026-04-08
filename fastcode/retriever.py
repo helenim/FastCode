@@ -604,7 +604,7 @@ class HybridRetriever:
             self.logger.info(
                 f"No repositories met the minimum score threshold of {MIN_SCORE_THRESHOLD}"
             )
-
+        
         return selected_repos
 
     def _select_relevant_repositories_by_llm(

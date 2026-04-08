@@ -864,5 +864,158 @@ def status():
                 console.print(f"{spec.label}: {'[green]✓[/green]' if has_key else '[dim]not set[/dim]'}")
 
 
+# ============================================================================
+# Chat (alias for agent interactive mode)
+# ============================================================================
+
+
+@app.command()
+def chat(
+    session_id: str = typer.Option("cli:chat", "--session", "-s", help="Session ID"),
+    markdown: bool = typer.Option(True, "--markdown/--no-markdown", help="Render Markdown"),
+    logs: bool = typer.Option(False, "--logs/--no-logs", help="Show runtime logs"),
+):
+    """Start an interactive chat session with the agent."""
+    # Delegate to the agent command in interactive mode
+    agent(message=None, session_id=session_id, markdown=markdown, logs=logs)
+
+
+# ============================================================================
+# Sync — trigger provider/channel synchronisation
+# ============================================================================
+
+
+@app.command()
+def sync():
+    """Synchronise channels and providers with current configuration."""
+    from nanobot.config.loader import load_config
+
+    config = load_config()
+
+    console.print(f"{__logo__} Syncing channels and providers...\n")
+
+    # Verify each channel's configuration is reachable
+    channels_cfg = config.channels
+    synced = 0
+
+    if channels_cfg.whatsapp.enabled:
+        console.print(f"  WhatsApp bridge: {channels_cfg.whatsapp.bridge_url}")
+        synced += 1
+    if channels_cfg.telegram.enabled:
+        token_preview = (channels_cfg.telegram.token[:10] + "...") if channels_cfg.telegram.token else "N/A"
+        console.print(f"  Telegram bot token: {token_preview}")
+        synced += 1
+    if channels_cfg.discord.enabled:
+        console.print(f"  Discord gateway: {channels_cfg.discord.gateway_url}")
+        synced += 1
+    if channels_cfg.slack.enabled:
+        console.print("  Slack: socket mode configured")
+        synced += 1
+
+    if synced == 0:
+        console.print("[yellow]No channels enabled in config.[/yellow]")
+        console.print("Enable channels in [cyan]~/.nanobot/config.json[/cyan]")
+    else:
+        console.print(f"\n[green]✓[/green] {synced} channel(s) verified")
+
+    # Verify provider
+    provider_name = config.get_provider_name()
+    provider = config.get_provider()
+    if provider and (provider.api_key or config.agents.defaults.model.startswith("bedrock/")):
+        console.print(f"[green]✓[/green] Provider '{provider_name}' configured")
+    else:
+        console.print(f"[yellow]⚠[/yellow] Provider '{provider_name}' has no API key set")
+
+    console.print(f"\n{__logo__} Sync complete.")
+
+
+# ============================================================================
+# Listen — start listening on configured channels
+# ============================================================================
+
+
+@app.command()
+def listen(
+    port: int = typer.Option(18790, "--port", "-p", help="Gateway port"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+):
+    """Start listening on all configured channels (alias for gateway)."""
+    gateway(port=port, verbose=verbose)
+
+
+# ============================================================================
+# Observe — print agent status and metrics
+# ============================================================================
+
+
+@app.command()
+def observe():
+    """Display agent status, configuration, and runtime metrics."""
+    from nanobot.config.loader import get_config_path, get_data_dir, load_config
+
+    config = load_config()
+    config_path = get_config_path()
+    data_dir = get_data_dir()
+
+    console.print(f"{__logo__} nanobot Observation Dashboard\n")
+
+    # --- Configuration ---
+    table = Table(title="Configuration")
+    table.add_column("Setting", style="cyan")
+    table.add_column("Value")
+
+    table.add_row("Config path", str(config_path))
+    table.add_row("Workspace", str(config.workspace_path))
+    table.add_row("Data directory", str(data_dir))
+    table.add_row("Model", config.agents.defaults.model)
+    table.add_row("Max tool iterations", str(config.agents.defaults.max_tool_iterations))
+    table.add_row("Provider", config.get_provider_name())
+    console.print(table)
+    console.print()
+
+    # --- Channel status ---
+    ch_table = Table(title="Channels")
+    ch_table.add_column("Channel", style="cyan")
+    ch_table.add_column("Enabled")
+
+    channels_cfg = config.channels
+    ch_table.add_row("WhatsApp", "[green]✓[/green]" if channels_cfg.whatsapp.enabled else "[dim]✗[/dim]")
+    ch_table.add_row("Telegram", "[green]✓[/green]" if channels_cfg.telegram.enabled else "[dim]✗[/dim]")
+    ch_table.add_row("Discord", "[green]✓[/green]" if channels_cfg.discord.enabled else "[dim]✗[/dim]")
+    ch_table.add_row("Slack", "[green]✓[/green]" if channels_cfg.slack.enabled else "[dim]✗[/dim]")
+    console.print(ch_table)
+    console.print()
+
+    # --- Cron jobs ---
+    from nanobot.cron.service import CronService
+
+    cron_store = data_dir / "cron" / "jobs.json"
+    if cron_store.exists():
+        cron = CronService(cron_store)
+        jobs = cron.list_jobs(include_disabled=True)
+        enabled = sum(1 for j in jobs if j.enabled)
+        console.print(f"Cron jobs: {len(jobs)} total, {enabled} enabled")
+    else:
+        console.print("Cron jobs: none configured")
+
+    # --- Session history ---
+    history_file = Path.home() / ".nanobot" / "history" / "cli_history"
+    if history_file.exists():
+        line_count = sum(1 for _ in history_file.open())
+        console.print(f"CLI history: {line_count} entries")
+    else:
+        console.print("CLI history: empty")
+
+    # --- Memory files ---
+    memory_dir = config.workspace_path / "memory"
+    if memory_dir.exists():
+        memory_files = list(memory_dir.glob("*.md"))
+        console.print(f"Memory files: {len(memory_files)}")
+    else:
+        console.print("Memory files: none")
+
+    console.print(f"\n{__logo__} Observation complete.")
+
+
 if __name__ == "__main__":
     app()

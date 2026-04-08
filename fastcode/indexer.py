@@ -169,161 +169,53 @@ class CodeIndexer:
 
         return self.elements
 
-    def index_incremental(
-        self,
-        repo_path: str,
-        repo_name: str,
-        since_commit: str | None = None,
-        repo_url: str | None = None,
-    ) -> tuple[list[CodeElement], list[str]]:
-        """Incrementally index only files changed since a given commit.
+    def index_files(self, file_infos: List[Dict], repo_name: str,
+                    repo_url: str = None) -> List[CodeElement]:
+        """Index specific files only (for incremental reindexing).
 
-        Uses git diff to identify changed files, deletes their old vectors
-        from the store, then re-parses and re-embeds only those files.
+        Reuses existing _index_file() and embedding pipeline.
+        Skips repo overview generation (already exists for this repo).
 
         Args:
-            repo_path: Path to the git repository.
-            repo_name: Repository name for identification.
-            since_commit: Git commit SHA to diff against. If None, reads from
-                stored metadata (last indexed commit).
-            repo_url: Optional repository URL.
+            file_infos: List of file info dicts from loader.scan_files()
+            repo_name: Repository name for element IDs
+            repo_url: Optional repository URL
 
         Returns:
-            Tuple of (new_elements, changed_file_paths).
+            List of CodeElement objects with embeddings
         """
-        try:
-            import git as gitmodule
-        except ImportError:
-            self.logger.error("GitPython required for incremental indexing")
-            return [], []
-
         self.current_repo_name = repo_name
         self.current_repo_url = repo_url
-
-        try:
-            repo = gitmodule.Repo(repo_path)
-        except Exception as e:
-            self.logger.error("Failed to open git repo at %s: %s", repo_path, e)
-            return [], []
-
-        head_sha = repo.head.commit.hexsha
-
-        # Read last indexed commit from metadata sidecar
-        meta_path = os.path.join(
-            self.config.get("vector_store", {}).get("persist_directory", "./data/vector_store"),
-            f"{repo_name}_incremental_meta.json",
-        )
-        if since_commit is None:
-            since_commit = self._read_last_indexed_commit(meta_path)
-
-        if since_commit is None:
-            self.logger.info("No previous commit found; performing full index")
-            elements = self.index_repository(repo_name=repo_name, repo_url=repo_url)
-            self._write_last_indexed_commit(meta_path, head_sha)
-            return elements, []
-
-        if since_commit == head_sha:
-            self.logger.info("Repository unchanged since last index (commit %s)", head_sha[:8])
-            return [], []
-
-        # Get changed files via git diff
-        try:
-            diff_index = repo.commit(since_commit).diff(repo.head.commit)
-        except Exception as e:
-            self.logger.warning("Git diff failed (%s); falling back to full index", e)
-            elements = self.index_repository(repo_name=repo_name, repo_url=repo_url)
-            self._write_last_indexed_commit(meta_path, head_sha)
-            return elements, []
-
-        changed_paths: list[str] = []
-        for diff_item in diff_index:
-            if diff_item.a_path:
-                changed_paths.append(diff_item.a_path)
-            if diff_item.b_path and diff_item.b_path != diff_item.a_path:
-                changed_paths.append(diff_item.b_path)
-
-        # Deduplicate
-        changed_paths = sorted(set(changed_paths))
-
-        if not changed_paths:
-            self.logger.info("No file changes detected between %s and %s", since_commit[:8], head_sha[:8])
-            self._write_last_indexed_commit(meta_path, head_sha)
-            return [], []
-
-        self.logger.info(
-            "Incremental index: %d files changed between %s and %s",
-            len(changed_paths), since_commit[:8], head_sha[:8],
-        )
-
-        # Delete old vectors for changed files
-        if self.vector_store is not None and hasattr(self.vector_store, "delete_by_files"):
-            self.vector_store.delete_by_files(repo_name, changed_paths)
-
-        # Re-index only changed files
         self.elements = []
-        for rel_path in changed_paths:
-            abs_path = os.path.join(repo_path, rel_path)
-            if not os.path.exists(abs_path):
-                # File was deleted
-                continue
 
-            content = self.loader.read_file_content(abs_path)
+        for file_info in file_infos:
+            file_path = file_info["path"]
+
+            content = self.loader.read_file_content(file_path)
             if content is None:
                 continue
 
-            parse_result = self.parser.parse_file(abs_path, content)
+            parse_result = self.parser.parse_file(file_path, content)
             if parse_result is None:
                 continue
 
-            file_info = {
-                "path": abs_path,
-                "relative_path": rel_path,
-                "extension": os.path.splitext(abs_path)[1],
-                "size": len(content),
-            }
             self._index_file(file_info, content, parse_result)
 
-        # Generate embeddings for new elements
+        self.logger.info(f"Parsed {len(self.elements)} elements from {len(file_infos)} changed files")
+
+        # Generate embeddings for new elements only
         if self.elements:
             element_dicts = [elem.to_dict() for elem in self.elements]
             elements_with_embeddings = self.embedder.embed_code_elements(element_dicts)
-            for elem, elem_dict in zip(self.elements, elements_with_embeddings, strict=False):
+
+            for elem, elem_dict in zip(self.elements, elements_with_embeddings):
                 elem.metadata["embedding"] = elem_dict.get("embedding")
                 elem.metadata["embedding_text"] = elem_dict.get("embedding_text")
 
-        # Save last indexed commit
-        self._write_last_indexed_commit(meta_path, head_sha)
+        return self.elements
 
-        self.logger.info(
-            "Incremental indexing complete: %d elements from %d changed files",
-            len(self.elements), len(changed_paths),
-        )
-        return self.elements, changed_paths
-
-    @staticmethod
-    def _read_last_indexed_commit(meta_path: str) -> str | None:
-        """Read the last indexed commit SHA from a sidecar JSON file."""
-        import json
-        try:
-            if os.path.exists(meta_path):
-                with open(meta_path) as f:
-                    data = json.load(f)
-                return data.get("last_indexed_commit")
-        except Exception:
-            pass
-        return None
-
-    @staticmethod
-    def _write_last_indexed_commit(meta_path: str, commit_sha: str) -> None:
-        """Write the last indexed commit SHA to a sidecar JSON file."""
-        import json
-        os.makedirs(os.path.dirname(meta_path), exist_ok=True)
-        with open(meta_path, "w") as f:
-            json.dump({"last_indexed_commit": commit_sha}, f)
-
-    def _index_file(
-        self, file_info: dict[str, Any], content: str, parse_result: FileParseResult
-    ):
+    def _index_file(self, file_info: Dict[str, Any], content: str,
+                    parse_result: FileParseResult):
         """Index a single file at multiple levels"""
         file_path = file_info["path"]
         relative_path = file_info["relative_path"]

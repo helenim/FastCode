@@ -9,15 +9,15 @@
 ### Security Hardening
 
 - [ ] **Wire Keycloak auth into MCP server** — `ebridge-shared[auth]` is already a dependency but not wired into `mcp_server.py`. Add token validation middleware for HTTP/SSE transports.
-- [ ] **Deploy `FASTCODE_ALLOWED_PATHS`** — Set the env var in all deployment configs to restrict which local paths can be indexed.
-- [ ] **Fix ReDoS in `agent_tools.py`** — Wrap `re.compile(search_term)` in try/except with a complexity check or use `re2` library.
+- [x] **Implement `FASTCODE_ALLOWED_PATHS`** — `_is_path_allowed()` helper added to `mcp_server.py`. Still needs to be set in all deployment configs.
+- [x] **Partial ReDoS mitigation in `agent_tools.py`** — `re.compile()` is now wrapped in try-except with `re.escape()` fallback. Full mitigation (complexity check or `re2`) still needed.
 - [ ] **Audit pickle usage** — Begin migrating `vector_store.py` metadata from pickle to JSON. Start with `repo_overviews.pkl` (simplest structure).
 
 ### Test Infrastructure
 
 - [ ] **Fix `__init__.py` eager imports** — Use lazy imports (e.g., `__getattr__` pattern) so tests can import submodules without pulling in `anthropic`.
 - [ ] **Raise coverage to 30%** — Add unit tests for `retriever.py` (fusion logic), `path_utils.py`, and `agent_tools.py`.
-- [ ] **Add `httpx` to dev dependencies** — Unblocks `test_api.py`.
+- [x] **Add `httpx` to dev dependencies** — Present in both `requirements.txt` and `pyproject.toml` optional dev deps.
 
 ### Input Validation
 
@@ -31,9 +31,9 @@
 ### Retrieval Quality
 
 - [ ] **Switch to `voyage-code-3`** — Change default embedding provider from `paraphrase-multilingual-MiniLM-L12-v2` to `voyage-code-3` (API provider). Update `config/config.yaml` defaults.
-- [ ] **Code-aware BM25 tokenization** — Split camelCase, snake_case, dot notation before BM25 indexing. Estimated +15-20% keyword recall improvement.
+- [x] **Code-aware BM25 tokenization** — `_code_tokenize()` in `retriever.py` now splits camelCase, snake_case, dots, dashes, and slashes. No stemming/stop-words yet.
 - [ ] **Tune `min_similarity`** — Raise from 0.15 to 0.25-0.30 to reduce noise in results.
-- [ ] **Document `graph_weight: 1.0`** — Clarify whether 2x vs semantic/keyword is intentional.
+- [x] **Balanced fusion weights** — `graph_weight` is now `0.5` (same as semantic/keyword). Default fusion method is RRF, which does not use weights.
 
 ### MCP Protocol
 
@@ -78,7 +78,7 @@
 | P0 | Wire Keycloak auth | Security | Medium |
 | P0 | Fix `__init__.py` imports | DX/Testing | Low |
 | P1 | Switch to voyage-code-3 | Quality | Low |
-| P1 | Code-aware BM25 tokenization | Quality | Medium |
+| ~~P1~~ | ~~Code-aware BM25 tokenization~~ | ~~Quality~~ | ~~Done~~ |
 | P1 | Raise coverage to 50% | Reliability | Medium |
 | P2 | Qdrant migration | Scalability | High |
 | P2 | Eliminate pickle | Security | High |

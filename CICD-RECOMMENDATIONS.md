@@ -169,6 +169,6 @@ lint (ruff + semgrep)
 ## Quick Wins (Can Ship This Week)
 
 1. Raise GitLab coverage from 15% → 25%
-2. Add `httpx` to dev deps (unblocks `test_api.py`)
-3. Pin `requires-python = ">=3.11"` in `pyproject.toml`
+2. ~~Add `httpx` to dev deps~~ (already in `requirements.txt` and `pyproject.toml`)
+3. ~~Pin `requires-python = ">=3.11"` in `pyproject.toml`~~ (already set)
 4. Add the new `test_security.py` and `test_monkey.py` to CI (already done)

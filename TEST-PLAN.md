@@ -6,7 +6,7 @@
 
 ## Current State
 
-- **15 test files** (13 existing + 2 new from audit)
+- **16 test files** (14 existing + 2 new from audit)
 - **5 collectible** without full dependency installation
 - **77 tests passing**, 8 failing (missing deps), 1 xfail (known ReDoS)
 - **Coverage**: ~15% (estimated — many modules untestable due to import chain)
@@ -134,8 +134,8 @@ def __getattr__(name):
 
 ### Add Missing Dev Dependencies
 
-- `httpx` — required by `test_api.py` (FastAPI TestClient)
-- `anthropic` — required by 10 test files via import chain
+- `httpx` — present in `requirements.txt` and `pyproject.toml` dev deps (required by FastAPI TestClient)
+- `anthropic` — present in `requirements.txt` but required by 9+ test files via eager `__init__.py` import chain
 
 ### Progressive Coverage Targets
 

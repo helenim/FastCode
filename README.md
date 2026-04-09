@@ -662,6 +662,11 @@ OPENAI_API_KEY=sk-... MODEL=gpt-5.2 BASE_URL=https://api.openai.com/v1 \
 | `get_session_history` | Retrieve the full Q&A history of a specific session. |
 | `delete_session` | Delete a conversation session and all its history. |
 | `delete_repo_metadata` | Delete indexed metadata for a repository (`.faiss`, `_metadata.pkl`, `_bm25.pkl`, `_graphs.pkl`) and remove its entry from `repo_overviews.pkl`, while keeping the repository source code. |
+| `search_symbol` | Find symbols (functions, classes, methods) by name across indexed repos. |
+| `get_repo_structure` | Get a high-level structural summary of an indexed repository. |
+| `get_file_summary` | Get a file's structure — classes, functions, imports, and type hints. |
+| `get_call_chain` | Trace function/method call chains across the codebase. |
+| `reindex_repo` | Force a full re-index of a repository (useful after code changes). |
 
 #### `code_qa` Parameters
 

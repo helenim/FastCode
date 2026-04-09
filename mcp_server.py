@@ -176,6 +176,24 @@ def _invalidate_loaded_state(fc) -> None:
         retriever.current_loaded_repos = None
 
 
+def _is_path_allowed(abs_path: str) -> bool:
+    """Check whether *abs_path* is permitted by the FASTCODE_ALLOWED_PATHS allowlist.
+
+    When the environment variable is unset or empty every path is allowed
+    (open-access mode).  When set, it is treated as a comma-separated list
+    of directory prefixes and *abs_path* must fall under at least one of them.
+    """
+    raw = os.environ.get("FASTCODE_ALLOWED_PATHS", "").strip()
+    if not raw:
+        return True  # no allowlist → permit everything
+
+    for entry in raw.split(","):
+        allowed = os.path.abspath(entry.strip())
+        if abs_path == allowed or abs_path.startswith(allowed + os.sep):
+            return True
+    return False
+
+
 def _run_full_reindex(
     repo_source: str, resolved_is_url: bool, repo_name: Optional[str] = None
 ) -> dict:

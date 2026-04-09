@@ -32,7 +32,6 @@ __all__ = [
     "CodeIndexer",
     "CodeParser",
     "FastCode",
-    "FastCode",
     "HybridRetriever",
     "IterativeAgent",
     "RepositoryLoader",

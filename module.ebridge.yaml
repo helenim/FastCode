@@ -1,0 +1,46 @@
+api_version: ebridge.2d.studio/module/v1
+kind: Module
+
+metadata:
+  name: fastcode
+  version: "1.0.0"
+  author: "e-Bridge Team"
+  license: "PROPRIETARY"
+  description: "Code intelligence with RAG search, dependency graphs, and analysis widgets"
+  tags: [code, analysis, rag, search, intelligence]
+
+contributions:
+  ui_widgets:
+    - widget_id: fastcode-code-viewer
+      widget_type: visualization
+      component_path: "src/components/CodeViewer.tsx"
+      display_name: "Code Viewer"
+      description: "Interactive code viewer with syntax highlighting and symbol navigation"
+      data_source:
+        type: rest_api
+        endpoint: "/api/fastcode/code"
+        refresh_interval_ms: 60000
+      layout:
+        width: 8
+        height: 4
+      sandbox_mode: shadow_dom
+
+    - widget_id: fastcode-dependency-graph
+      widget_type: visualization
+      component_path: "src/components/DependencyGraph.tsx"
+      display_name: "Dependency Graph"
+      description: "Visual dependency graph for module and import relationships"
+      data_source:
+        type: rest_api
+        endpoint: "/api/fastcode/graph"
+        refresh_interval_ms: 120000
+      layout:
+        width: 12
+        height: 6
+      sandbox_mode: shadow_dom
+
+lifecycle:
+  activation_mode: lazy
+
+permissions:
+  scope: workspace

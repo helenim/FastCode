@@ -1021,6 +1021,16 @@ black .
 
 ---
 
+## Module System
+
+This project declares its contributions to the e-Bridge micro-kernel in [`module.ebridge.yaml`](module.ebridge.yaml):
+
+| Contribution Point | Declarations |
+|--------------------|-------------|
+| `nats_handler` | Code intelligence event handlers (index updates, query routing, symbol search) |
+
+Manifests are validated by `python -m ebridge_module_host.cli validate` and CI pre-commit hooks.
+
 ## 📄 License
 
 FastCode is released under the MIT License. See [LICENSE](LICENSE) for details.

@@ -1,6 +1,18 @@
+## 2026-04-15 Refactor Status Update
+
+This submodule was touched by the 2026-Q2 audit refactor session. Key changes:
+
+- **KI-75 (REMEDIATED)**: nanobot CLI — 6 commands are now fully implemented (previously stubs). See `nanobot/` directory.
+- **KI-76 (REMEDIATED)**: Multi-repo graph merging — cross-repo reasoning path is now implemented and exercised by tests.
+- **FINDING-F03-002 / bandit HIGH (RESOLVED 2026-04-15)**: The 1× MD5 usage in `fastcode/utils.py:352` is now tagged `usedforsecurity=False` — bandit no longer flags it. This was part of the workspace-wide bandit hygiene sweep (Agent 4).
+
+Authoritative source: `_TODO_audit_plan/FINAL-AUDIT-STATUS-2026-04-15.md`. See also `_TODO_audit_plan/ACTION-PLAN-2026-04-15.md`.
+
+---
+
 # Audit Report: ebridge-fastcode
 
-> **Date**: 2026-04-07
+> **Date**: 2026-04-07 (Q2 ecosystem-audit overlay added 2026-04-15)
 > **Scope**: `2d-studio-ebridge-fastcode` — Python code intelligence service
 > **Auditor**: Automated engineering audit
 > **Classification**: Internal

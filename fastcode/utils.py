@@ -349,7 +349,9 @@ def get_repo_name_from_path(path: str, workspace_root: Optional[str] = None) -> 
         ):
             return base_name
 
-    digest = hashlib.md5(normalized.encode("utf-8")).hexdigest()[:8]
+    digest = hashlib.md5(
+        normalized.encode("utf-8"), usedforsecurity=False
+    ).hexdigest()[:8]
     return f"{base_name}-{digest}"
 
 

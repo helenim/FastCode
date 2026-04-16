@@ -2,8 +2,26 @@
 Tree-sitter Parser Wrapper.
 
 Provides a simple interface for parsing code with tree-sitter.
-Uses tree-sitter-language-pack for 170+ language grammars with a
-fallback to individual tree-sitter-{lang} packages.
+
+Two loading strategies are tried in order:
+
+1. ``tree_sitter_language_pack`` — when installed, this provides the full
+   tree-sitter language-pack catalogue (100+ grammars bundled in a single
+   wheel). This is the preferred path for full-feature container builds.
+2. Individual ``tree-sitter-{lang}`` packages — used as a defensive
+   fallback when the language pack is absent (common in slimmed-down
+   images). The fallback covers only the languages explicitly enumerated
+   in ``_INDIVIDUAL_LOADERS`` below.
+
+Fallback languages currently supported (when their individual wheel is
+installed): python, javascript, typescript, tsx, c, cpp, rust, csharp,
+java, go, ruby, kotlin, swift.
+
+Missing packages do not crash the parser: ``_load_language`` emits a
+WARN log and the caller receives ``ValueError`` so indexing can skip the
+file. The previous "170+ languages" marketing claim was tied to the
+language-pack path and did NOT apply when only individual packages were
+installed — see FINDING-EXT-C-010.
 """
 
 import logging
@@ -13,7 +31,7 @@ from tree_sitter import Language, Parser
 
 logger = logging.getLogger(__name__)
 
-# Try the language pack first (170+ languages), fall back to individual packages
+# Try the language pack first, fall back to individual packages
 _USE_LANGUAGE_PACK = False
 try:
     from tree_sitter_language_pack import get_language as _pack_get_language
@@ -42,14 +60,30 @@ _INDIVIDUAL_LOADERS: dict[str, tuple[str, str]] = {
     "csharp": ("tree_sitter_c_sharp", "language"),
     "java": ("tree_sitter_java", "language"),
     "go": ("tree_sitter_go", "language"),
+    # FINDING-EXT-C-010: new entries — Ruby / Kotlin / Swift fallback
+    # wheels. Each individual package exposes a module-level ``language()``
+    # factory compatible with ``tree_sitter.Language(fn())``.
+    "ruby": ("tree_sitter_ruby", "language"),
+    "kotlin": ("tree_sitter_kotlin", "language"),
+    "swift": ("tree_sitter_swift", "language"),
 }
+
+# Languages for which an individual-package import has already failed in
+# this process. Used to throttle WARN logs so we do not spam the operator
+# on every file indexed in an unsupported language.
+_UNAVAILABLE_LANGUAGES: set[str] = set()
 
 
 class TSParser:
     """Tree-sitter parser wrapper for multiple languages.
 
-    Supports 170+ languages via tree-sitter-language-pack, with automatic
-    fallback to individual tree-sitter-{lang} packages.
+    Primary loader: ``tree-sitter-language-pack`` (bundled grammar
+    catalogue). Fallback loader: individual ``tree-sitter-{lang}``
+    packages enumerated in ``_INDIVIDUAL_LOADERS``.
+
+    If neither loader can resolve a requested language the constructor
+    raises ``ValueError``; callers are expected to catch this and skip
+    the file rather than aborting an entire index run.
     """
 
     def __init__(self, language: str = "python"):
@@ -100,17 +134,34 @@ class TSParser:
                 module_name, func_name = loader_info
                 import importlib
 
-                mod = importlib.import_module(module_name)
-                lang = Language(getattr(mod, func_name)())
-                self.logger.debug(
-                    "Loaded '%s' from individual package %s",
-                    language_name, module_name,
-                )
+                try:
+                    mod = importlib.import_module(module_name)
+                except ImportError as exc:
+                    # Package not installed in this environment (e.g.
+                    # slimmed-down Docker image). Degrade gracefully:
+                    # warn once per language, then let the caller raise.
+                    # Hook point for future Prometheus counter
+                    # ``fastcode_language_unavailable_total{language=...}``.
+                    if language_name not in _UNAVAILABLE_LANGUAGES:
+                        self.logger.warning(
+                            "tree-sitter package '%s' for language '%s' is "
+                            "not installed; files in this language will be "
+                            "skipped. (%s)",
+                            module_name, language_name, exc,
+                        )
+                        _UNAVAILABLE_LANGUAGES.add(language_name)
+                else:
+                    lang = Language(getattr(mod, func_name)())
+                    self.logger.debug(
+                        "Loaded '%s' from individual package %s",
+                        language_name, module_name,
+                    )
 
         if lang is None:
             raise ValueError(
                 f"Unsupported language: {language_name}. "
-                f"Install tree-sitter-language-pack for 170+ language support."
+                f"Install tree-sitter-language-pack for the bundled grammar "
+                f"set, or install the individual tree-sitter-{{lang}} wheel."
             )
 
         self.languages_cache[language_name] = lang

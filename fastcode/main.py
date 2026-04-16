@@ -8,6 +8,7 @@ import logging
 import json
 import re
 from datetime import datetime
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 import numpy as np
@@ -25,6 +26,7 @@ from .parser import CodeParser
 from .query_processor import QueryProcessor
 from .retriever import HybridRetriever
 from .symbol_resolver import SymbolResolver
+from .vector_store import VectorStore
 from .utils import (
     ensure_dir,
     load_config,

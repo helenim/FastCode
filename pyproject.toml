@@ -16,6 +16,18 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio", "pytest-cov", "httpx"]
+# Extra tree-sitter grammars used when tree-sitter-language-pack is
+# unavailable (e.g. slim container builds). See FINDING-EXT-C-010.
+# NOTE: requirements.txt is the CI source of truth for runtime deps; this
+# extra exists so `pip install -e .[languages]` works in dev environments.
+# tree-sitter-swift has only 0.0.1 on PyPI at the time of pinning — the
+# stronger >=0.7.0 floor requested in the remediation plan does not yet
+# exist upstream.
+languages = [
+    "tree-sitter-ruby>=0.23.0",
+    "tree-sitter-kotlin>=1.0.0",
+    "tree-sitter-swift>=0.0.1",
+]
 
 [tool.setuptools.packages.find]
 include = ["fastcode*", "evaluation*"]

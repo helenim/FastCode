@@ -28,7 +28,7 @@ import logging
 import os
 import sys
 import uuid
-from typing import Any
+from typing import Any, List, Optional
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))

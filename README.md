@@ -86,7 +86,7 @@ FastCode is a token-efficient framework for comprehensive code understanding and
 
 ### 🛠️ Technical Capabilities
 - Large-Scale Repository Analysis - Handle massive codebases efficiently
-- Multi-Language Support - Python, JavaScript, TypeScript, Java, Go, C/C++, Rust, C#
+- Multi-Language Support - Python, JavaScript, TypeScript, Java, Go, C/C++, Rust, C#, Ruby, Kotlin, Swift (via individual fallback wheels; full catalogue available through `tree-sitter-language-pack`)
 - Multi-Repository Reasoning - Cross-repo dependency analysis
 - Small Model Support - Local model compatibility (qwen3-coder-30b)
 
@@ -759,14 +759,31 @@ BASE_URL=http://localhost:11434/v1
 
 ### Supported Languages
 
-FastCode automatically detects and parses:
+FastCode loads tree-sitter grammars through two layered paths:
+
+1. **`tree-sitter-language-pack`** — when installed, provides the bundled
+   grammar catalogue.
+2. **Individual `tree-sitter-{lang}` wheels** — defensive fallback used
+   when the language pack is absent (e.g. slim container builds).
+
+The individual-fallback floor (the set always available via
+`requirements.txt`) is:
+
 - 🐍 Python
-- 📜 JavaScript / TypeScript
+- 📜 JavaScript / TypeScript / TSX
 - ☕ Java
 - 🦀 Rust
 - 🐹 Go
 - ⚙️ C / C++
 - 💎 C#
+- 💎 Ruby (`.rb`, `.rake`, `.gemspec`)
+- 🦿 Kotlin (`.kt`, `.kts`)
+- 🦅 Swift (`.swift`)
+
+When the language pack is installed the active catalogue is larger; call
+`TSParser.supported_languages()` for the live list. Files in
+tree-sitter grammars that are not installed are skipped with a WARN log
+rather than aborting the index run.
 
 ---
 

@@ -8,7 +8,7 @@ import hashlib
 import logging
 import os
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Dict, List
 
 from tqdm import tqdm
 

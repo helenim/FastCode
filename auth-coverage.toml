@@ -1,0 +1,6 @@
+# Auth-coverage allowlist for the fastcode API.
+# See _TODO_triage_2026-04-16/scripts/auth-coverage.example.toml for the schema.
+
+[[allow]]
+path = "/health"
+reason = "Liveness probe — used by Kubernetes probes, must not require auth"

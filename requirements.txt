@@ -8,11 +8,15 @@ gitpython
 
 # Code Parsing
 tree-sitter
-tree-sitter-language-pack>=0.10.0  # 170+ language grammars
-# Individual packages kept as fallback (can be removed if language-pack covers all needs)
+tree-sitter-language-pack>=0.10.0  # Bundled grammar catalogue
+# Individual packages kept as fallback (used when language-pack is absent,
+# e.g. slim container builds). See FINDING-EXT-C-010 for language floor.
 tree-sitter-python
 tree-sitter-javascript
 tree-sitter-typescript
+tree-sitter-ruby>=0.23.0     # FINDING-EXT-C-010 / MT-02
+tree-sitter-kotlin>=1.0.0    # FINDING-EXT-C-010 / MT-02
+tree-sitter-swift>=0.0.1     # FINDING-EXT-C-010 / MT-02 (only 0.0.1 on PyPI)
 libcst
 
 # Embeddings & Vector Store

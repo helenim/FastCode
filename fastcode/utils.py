@@ -6,7 +6,7 @@ import hashlib
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import tiktoken
 import yaml
@@ -190,10 +190,13 @@ def get_language_from_extension(ext: str) -> str:
         ".hpp": "cpp",
         ".rs": "rust",
         ".rb": "ruby",
+        ".rake": "ruby",
+        ".gemspec": "ruby",
         ".php": "php",
         ".cs": "csharp",
         ".swift": "swift",
         ".kt": "kotlin",
+        ".kts": "kotlin",
         ".scala": "scala",
         ".r": "r",
         ".m": "objective-c",

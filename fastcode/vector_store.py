@@ -2,15 +2,214 @@
 Vector Store - Store and retrieve code embeddings
 """
 
+import json
 import logging
 import os
 import pickle
+import warnings
+from pathlib import Path
 from typing import Any
 
 import faiss
 import numpy as np
 
 from .utils import ensure_dir
+
+# ---------------------------------------------------------------------------
+# Metadata serialization helpers (JSONL replacement for pickle).
+#
+# Historical format: `{repo}_metadata.pkl` containing a dict with keys
+#   {"metadata": list[dict], "dimension": int, "distance_metric": str,
+#    "index_type": str}
+# New format: `{repo}_metadata.jsonl` — one JSON record per line.
+#   Line 0: header dict with keys {"__header__": True, "dimension": int,
+#           "distance_metric": str, "index_type": str, "count": int}
+#   Lines 1..N: one metadata dict per vector (same shape as before).
+# ---------------------------------------------------------------------------
+
+_PICKLE_DEPRECATION_MSG = (
+    "Loading vector-store metadata from pickle is deprecated due to the "
+    "pickle RCE risk (arbitrary code execution on attacker-controlled files). "
+    "The file will be auto-migrated to JSONL. See FINDING-EXT-C-004."
+)
+
+
+def _jsonl_path_for(pkl_path: str | os.PathLike) -> Path:
+    """Return the sibling .jsonl path for a given .pkl metadata path."""
+    p = Path(pkl_path)
+    if p.suffix == ".pkl":
+        return p.with_suffix(".jsonl")
+    # generic fallback: append .jsonl
+    return p.parent / (p.name + ".jsonl")
+
+
+def _metadata_to_jsonable(meta: Any) -> Any:
+    """Best-effort coercion of a metadata value to a JSON-safe representation.
+
+    Handles numpy scalars (converted via .item()) and ndarray (converted to
+    list). Falls back to str() for unknown types so a migration never fails
+    on a single bad row; a warning is logged by the caller if coercion
+    happens.
+    """
+    if isinstance(meta, dict):
+        return {str(k): _metadata_to_jsonable(v) for k, v in meta.items()}
+    if isinstance(meta, (list, tuple)):
+        return [_metadata_to_jsonable(v) for v in meta]
+    if isinstance(meta, (str, int, float, bool)) or meta is None:
+        return meta
+    # numpy scalar types expose .item()
+    if hasattr(meta, "item") and callable(meta.item):
+        try:
+            return meta.item()
+        except Exception:  # noqa: BLE001 - best-effort conversion
+            pass
+    if isinstance(meta, np.ndarray):
+        return meta.tolist()
+    # final fallback: stringify
+    return str(meta)
+
+
+def save_metadata_jsonl(
+    jsonl_path: str | os.PathLike,
+    metadata: list[dict[str, Any]],
+    *,
+    dimension: int | None,
+    distance_metric: str,
+    index_type: str,
+) -> None:
+    """Write metadata to JSONL (header + one record per vector).
+
+    Writes atomically via a tmp file + rename so a crash mid-write cannot
+    leave a partially-written file.
+    """
+    path = Path(jsonl_path)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    header = {
+        "__header__": True,
+        "dimension": dimension,
+        "distance_metric": distance_metric,
+        "index_type": index_type,
+        "count": len(metadata),
+    }
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(header, ensure_ascii=False) + "\n")
+        for meta in metadata:
+            f.write(
+                json.dumps(_metadata_to_jsonable(meta), ensure_ascii=False) + "\n"
+            )
+    os.replace(tmp, path)
+
+
+def load_metadata_jsonl(jsonl_path: str | os.PathLike) -> dict[str, Any]:
+    """Read a JSONL metadata file and return the same shape the old pickle
+    wrapper produced: {"metadata": [...], "dimension": ..., "distance_metric":
+    ..., "index_type": ...}.
+    """
+    path = Path(jsonl_path)
+    metadata: list[dict[str, Any]] = []
+    header: dict[str, Any] = {}
+    with open(path, encoding="utf-8") as f:
+        first = f.readline()
+        if not first:
+            return {
+                "metadata": [],
+                "dimension": None,
+                "distance_metric": "cosine",
+                "index_type": "HNSW",
+            }
+        parsed = json.loads(first)
+        if isinstance(parsed, dict) and parsed.get("__header__"):
+            header = parsed
+        else:
+            # No header — treat first line as a data row (tolerant mode).
+            metadata.append(parsed)
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            metadata.append(json.loads(line))
+    return {
+        "metadata": metadata,
+        "dimension": header.get("dimension"),
+        "distance_metric": header.get("distance_metric", "cosine"),
+        "index_type": header.get("index_type", "HNSW"),
+    }
+
+
+def load_metadata(
+    pkl_path: str | os.PathLike,
+    *,
+    logger: logging.Logger | None = None,
+    auto_migrate: bool = True,
+) -> dict[str, Any]:
+    """Load metadata from disk, preferring JSONL and falling back to pickle.
+
+    If the .jsonl sibling exists it is used directly. Otherwise the .pkl file
+    is loaded with a CRITICAL log + DeprecationWarning (tracks metric
+    ``fastcode_metadata_pickle_load_total``). On a successful pickle load,
+    the data is auto-migrated to JSONL and the old file is renamed to
+    ``.pkl.legacy`` so subsequent scans prefer the safe format.
+
+    Returns a dict with keys {"metadata", "dimension", "distance_metric",
+    "index_type"} regardless of source format.
+    """
+    logger = logger or logging.getLogger(__name__)
+    jsonl_path = _jsonl_path_for(pkl_path)
+
+    if jsonl_path.exists():
+        return load_metadata_jsonl(jsonl_path)
+
+    pkl = Path(pkl_path)
+    if not pkl.exists():
+        raise FileNotFoundError(f"No metadata file found: {pkl_path} or {jsonl_path}")
+
+    # Legacy pickle path — emit loud deprecation signals.
+    logger.critical(
+        "fastcode.metadata.pickle_load.deprecated",
+        extra={
+            "event": "fastcode.metadata.pickle_load.deprecated",
+            "metric": "fastcode_metadata_pickle_load_total",
+            "path": str(pkl),
+        },
+    )
+    warnings.warn(_PICKLE_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
+
+    with open(pkl, "rb") as f:
+        data = pickle.load(f)  # nosec B301 - legacy read-only path, see FINDING-EXT-C-004
+
+    if not isinstance(data, dict) or "metadata" not in data:
+        raise ValueError(
+            f"Unexpected pickle payload in {pkl}: expected dict with 'metadata' key"
+        )
+
+    if auto_migrate:
+        try:
+            save_metadata_jsonl(
+                jsonl_path,
+                data.get("metadata", []),
+                dimension=data.get("dimension"),
+                distance_metric=data.get("distance_metric", "cosine"),
+                index_type=data.get("index_type", "HNSW"),
+            )
+            legacy = pkl.with_suffix(pkl.suffix + ".legacy")
+            os.replace(pkl, legacy)
+            logger.warning(
+                "fastcode.metadata.pickle_load.migrated",
+                extra={
+                    "event": "fastcode.metadata.pickle_load.migrated",
+                    "legacy_path": str(legacy),
+                    "jsonl_path": str(jsonl_path),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 - migration is best-effort
+            logger.error(
+                "fastcode.metadata.pickle_load.migration_failed",
+                extra={
+                    "event": "fastcode.metadata.pickle_load.migration_failed",
+                    "error": str(exc),
+                },
+            )
+    return data
 
 
 class VectorStore:
@@ -488,22 +687,20 @@ class VectorStore:
             return
 
         index_path = os.path.join(self.persist_dir, f"{name}.faiss")
-        metadata_path = os.path.join(self.persist_dir, f"{name}_metadata.pkl")
+        metadata_path = os.path.join(self.persist_dir, f"{name}_metadata.jsonl")
 
         # Save FAISS index
         faiss.write_index(self.index, index_path)
 
-        # Save metadata
-        with open(metadata_path, "wb") as f:
-            pickle.dump(
-                {
-                    "metadata": self.metadata,
-                    "dimension": self.dimension,
-                    "distance_metric": self.distance_metric,
-                    "index_type": self.index_type,
-                },
-                f,
-            )
+        # Save metadata as JSONL (see FINDING-EXT-C-004 for migration away
+        # from pickle).
+        save_metadata_jsonl(
+            metadata_path,
+            self.metadata,
+            dimension=self.dimension,
+            distance_metric=self.distance_metric,
+            index_type=self.index_type,
+        )
 
         # Invalidate cache since we just modified the indexes
         self.invalidate_scan_cache()
@@ -525,23 +722,27 @@ class VectorStore:
             return False
 
         index_path = os.path.join(self.persist_dir, f"{name}.faiss")
-        metadata_path = os.path.join(self.persist_dir, f"{name}_metadata.pkl")
+        jsonl_path = os.path.join(self.persist_dir, f"{name}_metadata.jsonl")
+        pkl_path = os.path.join(self.persist_dir, f"{name}_metadata.pkl")
 
-        if not os.path.exists(index_path) or not os.path.exists(metadata_path):
+        if not os.path.exists(index_path):
             self.logger.warning(f"Index files not found in {self.persist_dir}")
+            return False
+        if not os.path.exists(jsonl_path) and not os.path.exists(pkl_path):
+            self.logger.warning(f"Metadata files not found in {self.persist_dir}")
             return False
 
         try:
             # Load FAISS index
             self.index = faiss.read_index(index_path)
 
-            # Load metadata
-            with open(metadata_path, "rb") as f:
-                data = pickle.load(f)  # nosec B301
-                self.metadata = data["metadata"]
-                self.dimension = data["dimension"]
-                self.distance_metric = data.get("distance_metric", "cosine")
-                self.index_type = data.get("index_type", "HNSW")
+            # Load metadata — prefers JSONL, falls back to pickle with a
+            # deprecation warning (see FINDING-EXT-C-004).
+            data = load_metadata(pkl_path, logger=self.logger)
+            self.metadata = data["metadata"]
+            self.dimension = data["dimension"]
+            self.distance_metric = data.get("distance_metric", "cosine")
+            self.index_type = data.get("index_type", "HNSW")
 
             # Set search parameters for HNSW
             if self.index_type == "HNSW" and hasattr(self.index, "hnsw"):
@@ -581,21 +782,24 @@ class VectorStore:
             return False
 
         index_path = os.path.join(self.persist_dir, f"{index_name}.faiss")
-        metadata_path = os.path.join(self.persist_dir, f"{index_name}_metadata.pkl")
+        jsonl_path = os.path.join(self.persist_dir, f"{index_name}_metadata.jsonl")
+        pkl_path = os.path.join(self.persist_dir, f"{index_name}_metadata.pkl")
 
-        if not os.path.exists(index_path) or not os.path.exists(metadata_path):
+        if not os.path.exists(index_path):
             self.logger.warning(f"Index files not found for {index_name}")
+            return False
+        if not os.path.exists(jsonl_path) and not os.path.exists(pkl_path):
+            self.logger.warning(f"Metadata files not found for {index_name}")
             return False
 
         try:
             # Load the other index
             other_index = faiss.read_index(index_path)
 
-            # Load metadata
-            with open(metadata_path, "rb") as f:
-                data = pickle.load(f)  # nosec B301
-                other_metadata = data["metadata"]
-                other_dimension = data["dimension"]
+            # Load metadata (JSONL preferred, pickle fallback).
+            data = load_metadata(pkl_path, logger=self.logger)
+            other_metadata = data["metadata"]
+            other_dimension = data["dimension"]
 
             # Verify dimensions match
             if self.dimension and self.dimension != other_dimension:
@@ -643,17 +847,28 @@ class VectorStore:
 
     def delete_by_filter(self, filter_func) -> int:
         """
-        Delete vectors matching a filter function
+        Delete vectors matching a filter function.
+
+        FAISS does not support in-place deletion of arbitrary rows for
+        every index type; this implementation reconstructs the surviving
+        embeddings and rebuilds a fresh index so that subsequent searches
+        cannot return indices belonging to deleted rows.
+
+        Fixes FINDING-EXT-C-003 (data loss + cross-tenant leakage).
 
         Args:
-            filter_func: Function that takes metadata and returns True to delete
+            filter_func: Function that takes metadata and returns True to
+                delete. Only rows for which ``filter_func(meta)`` is
+                truthy are removed.
 
         Returns:
-            Number of vectors deleted
+            Number of vectors deleted.
         """
-        # FAISS doesn't support direct deletion, need to rebuild
-        indices_to_keep = []
-        metadata_to_keep = []
+        if self.index is None or not self.metadata:
+            return 0
+
+        indices_to_keep: list[int] = []
+        metadata_to_keep: list[dict[str, Any]] = []
 
         for i, meta in enumerate(self.metadata):
             if not filter_func(meta):
@@ -661,20 +876,53 @@ class VectorStore:
                 metadata_to_keep.append(meta)
 
         num_deleted = len(self.metadata) - len(metadata_to_keep)
+        if num_deleted == 0:
+            return 0
 
-        if num_deleted > 0:
-            # Rebuild index
-            self.logger.info(f"Rebuilding index after deleting {num_deleted} vectors")
+        self.logger.info(
+            f"Rebuilding index after deleting {num_deleted} vectors "
+            f"(keeping {len(indices_to_keep)} of {len(self.metadata)})"
+        )
 
-            # Get vectors to keep (this is expensive)
-            # For now, we'll just track metadata
-            # In production, consider storing vectors separately
-            self.metadata = metadata_to_keep
+        dimension = self.index.d
 
-            self.logger.warning(
-                "Note: FAISS doesn't support efficient deletion. "
-                "Consider rebuilding the entire index for best performance."
-            )
+        # Reconstruct surviving vectors from the existing FAISS index. All
+        # index types that FastCode instantiates (IndexFlatIP, IndexFlatL2,
+        # IndexHNSWFlat) support reconstruct(); if a future backend adds a
+        # non-reconstructable index this will raise and prevent silent
+        # corruption (the old behaviour).
+        surviving_vectors = np.zeros(
+            (len(indices_to_keep), dimension), dtype=np.float32
+        )
+        for new_pos, old_idx in enumerate(indices_to_keep):
+            self.index.reconstruct(int(old_idx), surviving_vectors[new_pos])
+
+        # Build a fresh index matching the current configuration.
+        if self.index_type == "HNSW":
+            if self.distance_metric == "cosine":
+                new_index = faiss.IndexHNSWFlat(
+                    dimension, self.m, faiss.METRIC_INNER_PRODUCT
+                )
+            else:
+                new_index = faiss.IndexHNSWFlat(dimension, self.m, faiss.METRIC_L2)
+            new_index.hnsw.efConstruction = self.ef_construction
+            new_index.hnsw.efSearch = self.ef_search
+        else:
+            if self.distance_metric == "cosine":
+                new_index = faiss.IndexFlatIP(dimension)
+            else:
+                new_index = faiss.IndexFlatL2(dimension)
+
+        if len(indices_to_keep) > 0:
+            # Vectors were already normalized on add for cosine metric, so
+            # they remain valid after reconstruction — no re-normalization
+            # required here.
+            new_index.add(surviving_vectors)
+
+        # Swap in the rebuilt index + pruned metadata atomically from the
+        # caller's perspective (no yield points in between).
+        self.index = new_index
+        self.metadata = metadata_to_keep
 
         return num_deleted
 
@@ -712,8 +960,16 @@ class VectorStore:
         for file in os.listdir(self.persist_dir):
             if file.endswith(".faiss"):
                 repo_name = file.replace(".faiss", "")
-                metadata_file = os.path.join(
+                jsonl_file = os.path.join(
+                    self.persist_dir, f"{repo_name}_metadata.jsonl"
+                )
+                pkl_file = os.path.join(
                     self.persist_dir, f"{repo_name}_metadata.pkl"
+                )
+                # Prefer JSONL when available; fall back to pickle for
+                # legacy deployments.
+                metadata_file = (
+                    jsonl_file if os.path.exists(jsonl_file) else pkl_file
                 )
 
                 if os.path.exists(metadata_file):
@@ -730,40 +986,41 @@ class VectorStore:
                         file_count = 0
                         repo_url = "N/A"
 
-                        with open(metadata_file, "rb") as f:
-                            try:
-                                data = pickle.load(f)  # nosec B301
-                                metadata_list = data.get("metadata", [])
-                                element_count = len(metadata_list)
+                        try:
+                            # Prefers JSONL, falls back to pickle with a
+                            # deprecation warning + auto-migration.
+                            data = load_metadata(pkl_file, logger=self.logger)
+                            metadata_list = data.get("metadata", [])
+                            element_count = len(metadata_list)
 
-                                # Sample first few entries to get URL and estimate file count
-                                # (much faster than iterating through all)
-                                sample_size = min(
-                                    self._index_scan_sample_size, len(metadata_list)
+                            # Sample first few entries to get URL and estimate file count
+                            # (much faster than iterating through all)
+                            sample_size = min(
+                                self._index_scan_sample_size, len(metadata_list)
+                            )
+                            seen_files = set()
+
+                            for i in range(sample_size):
+                                meta = metadata_list[i]
+                                file_path = meta.get("file_path")
+                                if file_path:
+                                    seen_files.add(file_path)
+                                if not repo_url or repo_url == "N/A":
+                                    repo_url = meta.get("repo_url", "N/A")
+
+                            # Estimate total file count based on sample
+                            if sample_size > 0 and sample_size < len(metadata_list):
+                                file_count = int(
+                                    len(seen_files)
+                                    * (len(metadata_list) / sample_size)
                                 )
-                                seen_files = set()
+                            else:
+                                file_count = len(seen_files)
 
-                                for i in range(sample_size):
-                                    meta = metadata_list[i]
-                                    file_path = meta.get("file_path")
-                                    if file_path:
-                                        seen_files.add(file_path)
-                                    if not repo_url or repo_url == "N/A":
-                                        repo_url = meta.get("repo_url", "N/A")
-
-                                # Estimate total file count based on sample
-                                if sample_size > 0 and sample_size < len(metadata_list):
-                                    file_count = int(
-                                        len(seen_files)
-                                        * (len(metadata_list) / sample_size)
-                                    )
-                                else:
-                                    file_count = len(seen_files)
-
-                            except Exception as load_error:
-                                self.logger.warning(
-                                    f"Failed to parse metadata for {repo_name}: {load_error}"
-                                )
+                        except Exception as load_error:
+                            self.logger.warning(
+                                f"Failed to parse metadata for {repo_name}: {load_error}"
+                            )
 
                         available_repos.append(
                             {

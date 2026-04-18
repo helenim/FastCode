@@ -397,19 +397,38 @@ class FastCode:
                     f"Retrieved {len(dialogue_history)} previous dialogue summaries"
                 )
 
-        # NOTE: Query result caching is disabled to ensure full iterative_agent flow
-        # Original cache logic (disabled):
-        # use_cache = (not enable_multi_turn or not session_id) and self._should_use_cache()
-        # cached_result = None
-        # cache_key = None
-        # repo_hash = None
-        # if use_cache:
-        #     repo_hash = self._get_repo_hash()
-        #     cache_key = f"{question}_{','.join(sorted(repo_filter)) if repo_filter else 'all'}"
-        #     cached_result = self.cache_manager.get_query_result(cache_key, repo_hash)
-        #     if cached_result:
-        #         self.logger.info("Returning cached result")
-        # result = cached_result
+        # Query-result caching is opt-in. The full iterative_agent flow is
+        # kept as the default so cache-bypass remains the path the
+        # evaluation harness exercises; set ``FASTCODE_QUERY_CACHE=1`` in
+        # production / MCP deployments where stateless repeat queries are
+        # cheap to serve from cache. TTL and size are governed by the
+        # existing ``CacheManager`` config fields.
+        query_cache_enabled = os.getenv(
+            "FASTCODE_QUERY_CACHE", ""
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        use_cache = (
+            query_cache_enabled
+            and (not enable_multi_turn or not session_id)
+            and self._should_use_cache()
+        )
+        cached_result: dict[str, Any] | None = None
+        cache_key: str | None = None
+        repo_hash: str | None = None
+        if use_cache:
+            repo_hash = self._get_repo_hash()
+            cache_key = (
+                f"{question}_"
+                f"{','.join(sorted(repo_filter)) if repo_filter else 'all'}"
+            )
+            cached_result = self.cache_manager.get_query_result(
+                cache_key, repo_hash
+            )
+            if cached_result:
+                self.logger.info(
+                    "fastcode_query_cache_hit",
+                    extra={"cache_key": cache_key, "repo_hash": repo_hash},
+                )
+                return cached_result
 
         result = None  # Always process through full flow
         processed_query = None
@@ -510,10 +529,12 @@ class FastCode:
                     f"Saved dialogue turn {turn_number} for session {session_id}"
                 )
 
-            # Cache result for stateless flows (including single-turn sessions)
-            # NOTE: Query result caching is disabled to ensure full iterative_agent flow
-            # if use_cache and result is not None and cache_key and repo_hash:
-            #     self.cache_manager.set_query_result(cache_key, repo_hash, result)
+            # Cache result for stateless flows (including single-turn sessions).
+            # Gated on the same FASTCODE_QUERY_CACHE flag evaluated above; the
+            # hit path (``use_cache``) encodes both the flag and the
+            # eligibility check (no multi-turn session, non-ephemeral mode).
+            if use_cache and result is not None and cache_key and repo_hash:
+                self.cache_manager.set_query_result(cache_key, repo_hash, result)
 
             return result
 

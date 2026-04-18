@@ -61,7 +61,7 @@ def _metadata_to_jsonable(meta: Any) -> Any:
     if hasattr(meta, "item") and callable(meta.item):
         try:
             return meta.item()
-        except Exception:  # noqa: BLE001 - best-effort conversion
+        except Exception:
             pass
     if isinstance(meta, np.ndarray):
         return meta.tolist()
@@ -201,7 +201,7 @@ def load_metadata(
                     "jsonl_path": str(jsonl_path),
                 },
             )
-        except Exception as exc:  # noqa: BLE001 - migration is best-effort
+        except Exception as exc:
             logger.error(
                 "fastcode.metadata.pickle_load.migration_failed",
                 extra={
@@ -561,11 +561,11 @@ class VectorStore:
                 # L2 distance converted to similarity
                 distance = float(np.linalg.norm(query_vector - embedding))
                 similarity = 1.0 / (1.0 + distance)
-            
+
             self.logger.debug(
                 f"Repository overview similarity for {repo_name}: {similarity:.4f}"
             )
-            
+
             # Apply minimum score filter
             if min_score is not None and similarity < min_score:
                 continue

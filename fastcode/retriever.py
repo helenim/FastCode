@@ -12,6 +12,16 @@ from typing import Any
 import numpy as np
 from rank_bm25 import BM25Okapi
 
+from .embedder import CodeEmbedder
+from .graph_builder import CodeGraphBuilder
+from .indexer import CodeElement
+from .iterative_agent import IterativeAgent
+from .query_processor import ProcessedQuery
+from .repo_selector import RepositorySelector
+from .utils import ensure_dir
+from .vector_store import VectorStore
+from .vector_stores import create_vector_store
+
 # Code-aware tokenizer: splits on whitespace, camelCase, snake_case, and dots
 _CAMEL_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 _SPLIT_RE = re.compile(r"[_.\-/\\]+")
@@ -35,16 +45,6 @@ def _code_tokenize(text: str) -> list[str]:
             sub_parts = _CAMEL_RE.sub(" ", part).split()
             tokens.extend(t for t in sub_parts if len(t) > 1)
     return tokens
-
-from .embedder import CodeEmbedder
-from .graph_builder import CodeGraphBuilder
-from .indexer import CodeElement
-from .iterative_agent import IterativeAgent
-from .query_processor import ProcessedQuery
-from .repo_selector import RepositorySelector
-from .utils import ensure_dir
-from .vector_store import VectorStore
-from .vector_stores import create_vector_store
 
 
 class HybridRetriever:
@@ -604,7 +604,7 @@ class HybridRetriever:
             self.logger.info(
                 f"No repositories met the minimum score threshold of {MIN_SCORE_THRESHOLD}"
             )
-        
+
         return selected_repos
 
     def _select_relevant_repositories_by_llm(

@@ -9,7 +9,6 @@ wrong-tenant — records.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from fastcode.vector_stores.factory import create_vector_store
 

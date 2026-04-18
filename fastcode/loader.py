@@ -13,12 +13,8 @@ from typing import Any
 from git import GitCommandError, Repo
 
 from .utils import (
-    is_supported_file,
-    should_ignore_path,
-    get_repo_name_from_url,
-    get_repo_name_from_path,
-    normalize_path,
     ensure_dir,
+    get_repo_name_from_path,
     get_repo_name_from_url,
     is_supported_file,
     normalize_path,
@@ -139,7 +135,7 @@ class RepositoryLoader:
 
         if not os.path.isdir(path):
             raise ValueError(f"Path is not a directory: {path}")
-        
+
         destination_root = os.path.abspath(target_dir) if target_dir else self.safe_repo_root
         source_path = os.path.abspath(path)
         self.repo_name = get_repo_name_from_path(

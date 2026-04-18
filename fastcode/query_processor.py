@@ -702,7 +702,7 @@ class QueryProcessor:
                 return {}
 
             self.logger.debug("LLM enhancement response received")
-            
+
             # Parse LLM response
             enhancements = self._parse_llm_response(response, intent)
             return enhancements
@@ -1031,11 +1031,9 @@ Be concise and focus on improving code retrieval accuracy."""
         for prefix in prefixes_to_remove:
             if rewritten.lower().startswith(prefix):
                 rewritten = rewritten[len(prefix):].strip()
-        
+
         # Remove quotes if present
-        if rewritten.startswith('"') and rewritten.endswith('"'):
+        if (rewritten.startswith('"') and rewritten.endswith('"')) or (rewritten.startswith("'") and rewritten.endswith("'")):
             rewritten = rewritten[1:-1]
-        elif rewritten.startswith("'") and rewritten.endswith("'"):
-            rewritten = rewritten[1:-1]
-        
+
         return rewritten if rewritten else None

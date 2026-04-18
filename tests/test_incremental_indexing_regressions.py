@@ -10,7 +10,6 @@ from unittest.mock import Mock
 
 import numpy as np
 
-
 ROOT = Path(__file__).resolve().parents[1]
 FASTCODE_MAIN = ROOT / "fastcode" / "main.py"
 MCP_SERVER = ROOT / "mcp_server.py"

@@ -2,13 +2,13 @@
 Main FastCode Class - Orchestrate all components
 """
 
+import json
 import os
 import pickle
-import logging
-import json
 import re
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse
 
 import numpy as np
@@ -26,13 +26,13 @@ from .parser import CodeParser
 from .query_processor import QueryProcessor
 from .retriever import HybridRetriever
 from .symbol_resolver import SymbolResolver
-from .vector_store import VectorStore
 from .utils import (
     ensure_dir,
     load_config,
     resolve_config_paths,
     setup_logging,
 )
+from .vector_store import VectorStore
 from .vector_stores import create_vector_store
 
 
@@ -231,11 +231,11 @@ class FastCode:
 
             # Index code elements with repository information
             elements = self.indexer.index_repository(repo_name=repo_name, repo_url=repo_url)
-            
+
             # Single-repository indexing should always build a fresh in-memory
             # index so saved artifacts never mix metadata from prior repos.
             self.vector_store.initialize(self.embedder.embedding_dim)
-            
+
             # Add embeddings to vector store
             vectors = []
             metadata = []
@@ -303,7 +303,7 @@ class FastCode:
             )
             self.graph_builder = fresh_graph_builder
             self.retriever.graph_builder = self.graph_builder
-            
+
             # Index for BM25
             self.retriever.index_for_bm25(elements)
 
@@ -1357,9 +1357,9 @@ class FastCode:
                     return False
             else:
                 repos_to_load = available_repos
-            
+
             self.logger.info(f"Found {len(repos_to_load)} repository indexes: {', '.join(repos_to_load)}")
-            
+
             # Always reinitialize for clean merge
             previously_loaded = dict(self.loaded_repositories)
             self.vector_store.initialize(self.embedder.embedding_dim)
@@ -1372,7 +1372,7 @@ class FastCode:
             self.multi_repo_mode = False
             if hasattr(self.retriever, "current_loaded_repos"):
                 self.retriever.current_loaded_repos = None
-            
+
             # Load each repository index and merge them
             successfully_loaded = []
             for repo_name in repos_to_load:
@@ -1402,7 +1402,7 @@ class FastCode:
                 self.logger.error("Failed to load any repository indexes")
                 invalidate_in_memory_state()
                 return False
-            
+
             # Register only the repositories that are actually present in memory.
             self.loaded_repositories = {}
             for repo_name in successfully_loaded:
@@ -1414,7 +1414,7 @@ class FastCode:
                     **({"url": repo_info["url"]} if "url" in repo_info else {}),
                     **({"path": repo_info["path"]} if "path" in repo_info else {}),
                 }
-            
+
             # Try to load BM25 and graph data from saved files
             # For multi-repo, we merge BM25 data from all loaded repositories
             self.logger.info("Loading BM25 and graph data...")
@@ -1448,7 +1448,7 @@ class FastCode:
                 else:
                     self.logger.warning(f"BM25 data not found for {repo_name}")
                     bm25_cache_complete = False
-                
+
                 # Load graph data (merge into main graph)
                 if not graphs_loaded:
                     # Load the first repository's graph as base
@@ -1523,7 +1523,7 @@ class FastCode:
             self.logger.error(traceback.format_exc())
             invalidate_in_memory_state()
             return False
-    
+
     # ------------------------------------------------------------------
     # Incremental indexing
     # ------------------------------------------------------------------
@@ -1574,7 +1574,7 @@ class FastCode:
         if not os.path.exists(manifest_path):
             return None
         try:
-            with open(manifest_path, "r") as f:
+            with open(manifest_path) as f:
                 return json.load(f)
         except Exception as e:
             self.logger.warning(f"Failed to load manifest for '{repo_name}': {e}")
@@ -1661,7 +1661,7 @@ class FastCode:
 
         return unchanged_elements, list(unchanged_element_ids)
 
-    def incremental_reindex(self, repo_name: str, repo_path: str = None) -> dict:
+    def incremental_reindex(self, repo_name: str, repo_path: str | None = None) -> dict:
         """Perform incremental reindexing: only re-embed changed files.
 
         Unchanged files reuse their existing embeddings. FAISS, BM25, and

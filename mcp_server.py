@@ -28,7 +28,7 @@ import logging
 import os
 import sys
 import uuid
-from typing import Any, List, Optional
+from typing import Any
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -72,14 +72,14 @@ def _repo_name_from_source(source: str, is_url: bool) -> str:
     """Derive a canonical repo name from a URL or local path."""
     from fastcode.utils import get_repo_name_from_path, get_repo_name_from_url
 
-    def repo_index_files_exist(persist_dir: Optional[str], repo_name: Optional[str]) -> bool:
+    def repo_index_files_exist(persist_dir: str | None, repo_name: str | None) -> bool:
         if not persist_dir or not repo_name:
             return False
         faiss_path = os.path.join(persist_dir, f"{repo_name}.faiss")
         meta_path = os.path.join(persist_dir, f"{repo_name}_metadata.pkl")
         return os.path.exists(faiss_path) and os.path.exists(meta_path)
 
-    def strip_repo_hash_suffix(repo_name: str) -> Optional[str]:
+    def strip_repo_hash_suffix(repo_name: str) -> str | None:
         base_name, sep, suffix = repo_name.rpartition("-")
         if not sep or len(suffix) != 8:
             return None
@@ -195,7 +195,7 @@ def _is_path_allowed(abs_path: str) -> bool:
 
 
 def _run_full_reindex(
-    repo_source: str, resolved_is_url: bool, repo_name: Optional[str] = None
+    repo_source: str, resolved_is_url: bool, repo_name: str | None = None
 ) -> dict:
     """Reindex using a clean FastCode instance to avoid mixed in-memory artifacts."""
     from fastcode import FastCode
@@ -225,7 +225,7 @@ def _run_full_reindex(
     return {"status": "success", "count": count}
 
 
-def _ensure_repos_ready(repos: List[str], allow_incremental: bool = True, ctx=None) -> List[str]:
+def _ensure_repos_ready(repos: list[str], allow_incremental: bool = True, ctx=None) -> list[str]:
     """
     For each repo source string:
       - If already indexed → skip
@@ -238,7 +238,7 @@ def _ensure_repos_ready(repos: List[str], allow_incremental: bool = True, ctx=No
     _apply_forced_env_excludes(fc)
     ready_names: list[str] = []
 
-    def strip_repo_hash_suffix(repo_name: str) -> Optional[str]:
+    def strip_repo_hash_suffix(repo_name: str) -> str | None:
         base_name, sep, suffix = repo_name.rpartition("-")
         if not sep or len(suffix) != 8:
             return None
@@ -246,7 +246,7 @@ def _ensure_repos_ready(repos: List[str], allow_incremental: bool = True, ctx=No
             return None
         return base_name or None
 
-    def find_legacy_local_collisions(source: str, resolved_name: str) -> List[str]:
+    def find_legacy_local_collisions(source: str, resolved_name: str) -> list[str]:
         try:
             from fastcode.utils import get_repo_name_from_path
         except Exception:
@@ -364,7 +364,7 @@ def _ensure_repos_ready(repos: List[str], allow_incremental: bool = True, ctx=No
     return ready_names
 
 
-def _ensure_loaded(fc, ready_names: List[str]) -> bool:
+def _ensure_loaded(fc, ready_names: list[str]) -> bool:
     """Ensure repos are loaded into memory (vectors + BM25 + graphs)."""
     if not fc.repo_indexed or set(ready_names) != set(fc.loaded_repositories.keys()):
         logger.info(f"Loading repos into memory: {ready_names}")
@@ -823,7 +823,7 @@ def get_file_summary(file_path: str, repos: list[str]) -> str:
 
 
 def _walk_call_chain(gb, element_id: str, direction: str, hops_left: int,
-                     parts: list, indent: int = 2, visited: set = None):
+                     parts: list, indent: int = 2, visited: set | None = None):
     """Recursively walk the call chain and format output."""
     if visited is None:
         visited = {element_id}

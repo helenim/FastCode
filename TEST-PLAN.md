@@ -4,12 +4,20 @@
 
 ---
 
-## Current State
+## Current State (refreshed 2026-04-18)
 
-- **16 test files** (14 existing + 2 new from audit)
-- **5 collectible** without full dependency installation
-- **77 tests passing**, 8 failing (missing deps), 1 xfail (known ReDoS)
-- **Coverage**: ~15% (estimated — many modules untestable due to import chain)
+- **19 test files** under `tests/` (plus `tests/__init__.py`)
+- **5 collectible** without full dependency installation (the rest hit the
+  eager `fastcode/__init__.py` import chain → `anthropic`)
+- Security + monkey suites: **77 tests** passing with 1 xfail (known ReDoS)
+- Newer suites: `test_graph_enhanced_rag`, `test_graph_expansion`,
+  `test_incremental_indexing`, `test_incremental_indexing_regressions`,
+  `test_model_routing`, `test_semantic_cache`, `test_reranker`,
+  `test_vector_stores`, `test_metadata_migration`, `test_language_expansion`,
+  `test_embedding_providers`, `test_tree_sitter_parser`, `test_evaluation`,
+  `test_delete_by_filter`
+- **Coverage gate**: 15% line+branch on `fastcode/` + `api` + `mcp_server`
+  (GitLab CI); GitHub Actions enforces 50% on `api` and `mcp_server` only
 
 ---
 
@@ -119,23 +127,37 @@ Tests to add:
 
 ## Testing Infrastructure Improvements
 
-### Fix `__init__.py` Import Chain
+### Fix `__init__.py` Import Chain (still open)
 
-**Problem**: `fastcode/__init__.py` eagerly imports `AnswerGenerator` which requires `anthropic`. Any test importing `fastcode.*` fails without full deps.
+**Problem**: `fastcode/__init__.py` eagerly imports `AnswerGenerator`,
+`IterativeAgent`, `FastCode`, `CodeIndexer`, `HybridRetriever`,
+`RepositoryOverviewGenerator`, `RepositorySelector`, `CodeParser`,
+`RepositoryLoader`, and `AgentTools`. `AnswerGenerator` transitively pulls
+`anthropic`. Any test importing `fastcode.*` fails without full deps.
 
 **Solution**: Use lazy imports via `__getattr__`:
 ```python
-def __getattr__(name):
-    if name == "AnswerGenerator":
-        from .answer_generator import AnswerGenerator
-        return AnswerGenerator
+_LAZY = {
+    "AnswerGenerator": ".answer_generator",
+    "IterativeAgent":  ".iterative_agent",
+    "FastCode":        ".main",
+    # ...
+}
+
+def __getattr__(name: str):
+    if name in _LAZY:
+        import importlib
+        return getattr(importlib.import_module(_LAZY[name], __name__), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 ```
 
-### Add Missing Dev Dependencies
+### Dev Dependencies
 
-- `httpx` — present in `requirements.txt` and `pyproject.toml` dev deps (required by FastAPI TestClient)
-- `anthropic` — present in `requirements.txt` but required by 9+ test files via eager `__init__.py` import chain
+- `httpx` — present in `requirements.txt` and `pyproject.toml[dev]` (required
+  by FastAPI TestClient) ✓
+- `anthropic` — present in `requirements.txt`, but required by ~15 test files
+  via the eager `__init__.py` chain above. Fixing the chain removes this
+  implicit dependency.
 
 ### Progressive Coverage Targets
 

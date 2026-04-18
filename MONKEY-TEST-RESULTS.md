@@ -1,8 +1,9 @@
 # Monkey Test Results: ebridge-fastcode
 
-> **Date**: 2026-04-07
+> **Initial run**: 2026-04-07
 > **Runner**: Python 3.11.14, pytest 9.0.2
 > **Environment**: macOS Darwin 25.4.0 (faiss not installed — VectorStore tests skipped)
+> **Note (2026-04-18)**: the numbers below reflect the original 42-case `test_monkey.py` run. `faiss-cpu` is now installed in CI, so the 16 skipped cases pass in the full pipeline. Replay `pytest tests/test_monkey.py -v` for the current counts.
 
 ---
 

@@ -42,8 +42,15 @@ Operator and agent entry points: parent [README.md](../../README.md), workspace 
 | First run (pip / uv) | [Quick Start](#-quick-start) · [Installation](#-installation) |
 | Default ports | [Default ports](#default-ports-this-repository) |
 | REST / OpenAPI | [REST API](#rest-api) · [docs/API.md](docs/API.md) |
-| Docker + Nanobot + Feishu | [Nanobot + Feishu](#-nanobot--feishu-lark-integration-docker-deployment) · [`docker-compose.yml`](docker-compose.yml) |
-| MCP (Cursor / Claude) | [MCP Server](#mcp-server-use-in-cursor--claude-code--windsurf) |
+| Architecture & data flow | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Security model & threat surface | [docs/SECURITY.md](docs/SECURITY.md) · [AUDIT-REPORT.md](AUDIT-REPORT.md) |
+| MCP server (tools, transports, env) | [docs/MCP.md](docs/MCP.md) · [MCP Server](#mcp-server-use-in-cursor--claude-code--windsurf) |
+| Deployment & operations | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| Docker + Nanobot + Feishu + WhatsApp | [Nanobot + Feishu](#-nanobot--feishu-lark-integration-docker-deployment) · [`docker-compose.yml`](docker-compose.yml) · [`nanobot/bridge/`](nanobot/bridge/) |
+| Test plan & coverage | [TEST-PLAN.md](TEST-PLAN.md) · [MONKEY-TEST-RESULTS.md](MONKEY-TEST-RESULTS.md) |
+| CI/CD pipeline | [CICD-RECOMMENDATIONS.md](CICD-RECOMMENDATIONS.md) · [`.gitlab-ci.yml`](.gitlab-ci.yml) · [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
+| Roadmap & open work | [ROADMAP.md](ROADMAP.md) |
+| Release history | [CHANGELOG.md](CHANGELOG.md) |
 | Architecture ADRs (platform) | Parent [docs/adr/README.md](../../docs/adr/README.md) |
 
 ---
@@ -795,12 +802,18 @@ FastCode can be integrated with a Feishu (Lark) bot via [Nanobot](https://github
 ### Architecture
 
 ```
-Feishu User ←→ Feishu Open Platform ←→ Nanobot (WebSocket) ←→ FastCode API
-                                        (port 18791)            (port 8001)
+Feishu User   ─┐
+WhatsApp User ─┤→  Feishu Open Platform / WhatsApp (Baileys)
+               │        ↕ (WebSocket / WA gateway)
+               └──> Nanobot  ─────────────────> FastCode API
+                    (port 18791)                (port 8001)
 ```
 
 - **FastCode Container**: Provides the code analysis REST API (port 8001)
 - **Nanobot Container**: Connects to Feishu via WebSocket and invokes FastCode tools (port 18791)
+- **`nanobot/bridge/`**: Optional Node.js **WhatsApp gateway**
+  (`nanobot-whatsapp-bridge`, uses the Baileys library). Linted and built by
+  the `whatsapp-bridge` GitLab CI job.
 - Both containers communicate over Docker's internal network — no public IP required
 
 ### Quick Start
@@ -1044,7 +1057,7 @@ This project declares its contributions to the e-Bridge micro-kernel in [`module
 
 | Contribution Point | Declarations |
 |--------------------|-------------|
-| `nats_handler` | Code intelligence event handlers (index updates, query routing, symbol search) |
+| `ui_widgets` | `fastcode-code-viewer` (REST `/api/fastcode/code`, 8×4) and `fastcode-dependency-graph` (REST `/api/fastcode/graph`, 12×6). Both use `sandbox_mode: shadow_dom`, `activation_mode: lazy`, and `permissions.scope: workspace`. |
 
 Manifests are validated by `python -m ebridge_module_host.cli validate` and CI pre-commit hooks.
 

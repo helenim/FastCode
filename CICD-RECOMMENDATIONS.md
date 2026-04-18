@@ -1,23 +1,49 @@
 # CI/CD Recommendations: ebridge-fastcode
 
-> Based on audit findings from 2026-04-07
+> Based on audit findings from 2026-04-07, refreshed 2026-04-18
 
 ---
 
 ## Current Pipeline
 
+**GitLab CI (`.gitlab-ci.yml`)**
+
 ```
-GitLab CI:  lint (ruff) → test (pytest, 15%) → type-check (mypy) → security (bandit + pip-audit)
-GitHub Actions: lint (ruff) → test (pytest, 50%)
+lint
+  ├── ruff (fastcode/, api.py, mcp_server.py, main.py, web_app.py)
+  │    + ruff --select F,B,S on nanobot/nanobot/
+  └── whatsapp-bridge (cd nanobot/bridge && npm ci && npm run build
+                       && npm audit --audit-level=high)
+test
+  ├── pytest (coverage 15% on fastcode + api + mcp_server)
+  └── nanobot-pytest  (pip install -e ./nanobot[dev])
+type-check
+  └── mypy (strict on entrypoints, ignore_errors=True inside fastcode/*)
+security
+  └── bandit -c bandit.yaml  +  pip-audit --strict
 ```
+
+**GitHub Actions (`.github/workflows/ci.yml`)**
+
+```
+lint (ruff)  →  test (pytest, --cov-fail-under=50 on api + mcp_server only)
+```
+
+> The GitHub Actions coverage gate is narrower than GitLab's: it excludes
+> `fastcode/` and only rides on the two entrypoints, which is what allows it
+> to demand 50% while the library-wide GitLab gate stays at 15%.
 
 ---
 
 ## Recommendations
 
-### 1. Fix Test Collection (P0)
+### 1. Fix Test Collection (P0 — still open)
 
-**Problem**: 10 of 13 test files fail to collect because `fastcode/__init__.py` eagerly imports `AnswerGenerator` → `anthropic`. This means CI only runs ~35 of potentially 200+ tests.
+**Problem**: `fastcode/__init__.py` eagerly imports `AnswerGenerator`,
+`IterativeAgent` and friends. Every test that touches `from fastcode import X`
+drags in `anthropic` at collection time, which keeps ~14 of the 19 test files
+uncollectable without a full dependency install. Local runs on a slim env
+therefore execute ~35 of potentially 200+ tests.
 
 **Fix**: Refactor `fastcode/__init__.py` to use lazy imports:
 ```python
@@ -169,6 +195,8 @@ lint (ruff + semgrep)
 ## Quick Wins (Can Ship This Week)
 
 1. Raise GitLab coverage from 15% → 25%
-2. ~~Add `httpx` to dev deps~~ (already in `requirements.txt` and `pyproject.toml`)
+2. ~~Add `httpx` to dev deps~~ (already in `requirements.txt` and `pyproject.toml[dev]`)
 3. ~~Pin `requires-python = ">=3.11"` in `pyproject.toml`~~ (already set)
-4. Add the new `test_security.py` and `test_monkey.py` to CI (already done)
+4. ~~Add the new `test_security.py` and `test_monkey.py` to CI~~ (done — both run under the `pytest` GitLab job and the GitHub Actions `test` job)
+5. ~~Add `whatsapp-bridge` lint job~~ (already present in `.gitlab-ci.yml`; runs `npm ci`, `npm run build`, and `npm audit --audit-level=high` inside `nanobot/bridge/`)
+6. ~~Add `nanobot-pytest` job~~ (present; installs `./nanobot[dev]` and runs its pytest suite)

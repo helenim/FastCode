@@ -1,18 +1,19 @@
-## 2026-04-15 Refactor Status Update
+## 2026-04-18 Refactor Status Update
 
-This submodule was touched by the 2026-Q2 audit refactor session. Key changes:
+Cumulative status after the Q2 ecosystem-audit sweeps (2026-04-07, -04-15, -04-18):
 
 - **KI-75 (REMEDIATED)**: nanobot CLI — 6 commands are now fully implemented (previously stubs). See `nanobot/` directory.
-- **KI-76 (REMEDIATED)**: Multi-repo graph merging — cross-repo reasoning path is now implemented and exercised by tests.
-- **FINDING-F03-002 / bandit HIGH (RESOLVED 2026-04-15)**: The 1× MD5 usage in `fastcode/utils.py:352` is now tagged `usedforsecurity=False` — bandit no longer flags it. This was part of the workspace-wide bandit hygiene sweep (Agent 4).
-
-Authoritative source: `_TODO_audit_plan/FINAL-AUDIT-STATUS-2026-04-15.md`. See also `_TODO_audit_plan/ACTION-PLAN-2026-04-15.md`.
+- **KI-76 (REMEDIATED)**: Multi-repo graph merging — cross-repo reasoning path is implemented and exercised by tests.
+- **FINDING-F03-002 / bandit HIGH (RESOLVED 2026-04-15)**: The 1× MD5 usage in `fastcode/utils.py` is now tagged `usedforsecurity=False` — bandit no longer flags it. Part of the workspace-wide bandit hygiene sweep (Agent 4).
+- **Test suite growth (2026-04-18)**: Test inventory grew from 13 → 19 test files as graph, incremental-indexing, model-routing, semantic-cache, reranker, and vector-store suites landed.
+- **nanobot/bridge/ (2026-04-18)**: A Node.js WhatsApp gateway (`nanobot-whatsapp-bridge`, Baileys) now lives alongside the Feishu channel; gated by its own `whatsapp-bridge` GitLab CI job.
 
 ---
 
 # Audit Report: ebridge-fastcode
 
-> **Date**: 2026-04-07 (Q2 ecosystem-audit overlay added 2026-04-15)
+> **Initial audit**: 2026-04-07
+> **Overlays**: 2026-04-15 (Q2 ecosystem sweep), 2026-04-18 (doc-drift refresh)
 > **Scope**: `2d-studio-ebridge-fastcode` — Python code intelligence service
 > **Auditor**: Automated engineering audit
 > **Classification**: Internal
@@ -36,28 +37,28 @@ FastCode is a **hybrid FAISS + BM25 retrieval system** with tree-sitter AST pars
 
 ### SEC-001: Path Traversal via Prefix Collision [CRITICAL — FIXED]
 
-**File**: `fastcode/path_utils.py:263`
+**File**: `fastcode/path_utils.py` — `_is_within_root()` at line 274, called from `is_safe_path()` at line 248.
 **Vulnerability**: `is_safe_path()` used `abs_path.startswith(self.repo_root)`, allowing paths like `/tmp/repo_evil/secret` to pass when repo_root is `/tmp/repo`.
-**Fix**: Replaced with `_is_within_root()` using `abs_path == self.repo_root or abs_path.startswith(self.repo_root + os.sep)`.
+**Fix**: `_is_within_root()` uses `abs_path == self.repo_root or abs_path.startswith(self.repo_root + os.sep)`.
 **Test**: `tests/test_security.py::TestPathTraversal::test_prefix_collision`
 
 ### SEC-001b: Null Byte Injection [CRITICAL — FIXED]
 
-**File**: `fastcode/path_utils.py:258`
+**File**: `fastcode/path_utils.py:260` (null-byte guard at the top of `is_safe_path()`).
 **Vulnerability**: Null bytes in paths (`src/main.py\x00.txt`) were not rejected. Null bytes can truncate paths in C-level syscalls, bypassing extension checks.
-**Fix**: Added explicit null byte rejection at the top of `is_safe_path()`.
+**Fix**: Explicit null-byte rejection.
 **Test**: `tests/test_security.py::TestPathTraversal::test_null_byte`
 
 ### SEC-002: No MCP Authentication [HIGH — DOCUMENTED]
 
 **File**: `mcp_server.py`
 **Issue**: MCP server exposes 11 tools with zero authentication. The `repos` parameter in `code_qa()` accepts arbitrary filesystem paths — an attacker can index `/etc/`, `/home/`, or any readable directory.
-**Mitigation added**: `FASTCODE_ALLOWED_PATHS` environment variable restricts which local paths can be indexed (comma-separated allowlist). The `_is_path_allowed()` helper enforces this at `mcp_server.py:179`.
-**Recommendation**: Wire Keycloak authentication from `ebridge-shared[auth]` into the MCP server.
+**Mitigation added**: `FASTCODE_ALLOWED_PATHS` environment variable restricts which local paths can be indexed (comma-separated allowlist). The `_is_path_allowed()` helper lives at `mcp_server.py:179` and is invoked from `code_qa()` at `mcp_server.py:349`.
+**Recommendation**: Wire Keycloak authentication from `ebridge-shared[auth]` (already a pyproject dependency) into the MCP server.
 
 ### SEC-003: Input Validation Gaps [HIGH — FIXED]
 
-**File**: `mcp_server.py:226`
+**File**: `mcp_server.py` — `code_qa()` at line 422, validation around line 455.
 **Vulnerability**: `code_qa()` had no limits on question length, repos list size, or session_id format.
 **Fix**: Added validation: max 50K chars for question, max 20 repos, reject empty repos list.
 
@@ -71,7 +72,7 @@ FastCode is a **hybrid FAISS + BM25 retrieval system** with tree-sitter AST pars
 
 **File**: `fastcode/agent_tools.py`
 **Issue**: `re.compile(search_term)` with user-provided input is vulnerable to catastrophic backtracking (e.g., `(a+)+b` pattern).
-**Mitigation**: `re.compile()` is now wrapped in a `try-except re.error` block (line ~177) with a graceful error return. When `use_regex=False`, input is escaped via `re.escape()`.
+**Mitigation**: The regex path (`use_regex=True`) wraps `re.compile()` in a `try/except re.error` block at line 177 with a graceful error return. The literal path at line 192 pre-escapes input via `re.escape()` (lines 187-190), removing injection but not backtracking risk. The glob→regex compile at line 214 takes author-controlled patterns only.
 **Test**: `tests/test_security.py::TestReDoS::test_catastrophic_backtracking_pattern` (xfail — catastrophic backtracking itself is not prevented, only compilation errors are caught).
 **Recommendation**: Add a regex complexity check or use the `re2` library for guaranteed linear-time matching.
 
@@ -93,31 +94,46 @@ FastCode is a **hybrid FAISS + BM25 retrieval system** with tree-sitter AST pars
 **Available**: `voyage-code-3` configured as API provider but not default.
 **Recommendation**: Switch default to `voyage-code-3` or `nomic-embed-code`.
 
-### RET-003: Fusion Weight Configuration [RESOLVED]
+### RET-003: Fusion Weight Configuration [PARTIAL]
 
-**Config**: `config/config.yaml`
-**Status**: Weights are now balanced: `semantic_weight: 0.5`, `keyword_weight: 0.5`, `graph_weight: 0.5`. The default `fusion_method` is `"rrf"` (Reciprocal Rank Fusion), which does not use these weights — they only apply to the legacy `"weighted_linear"` fusion method.
+**Config**: `config/config.yaml` — balanced: `semantic_weight: 0.5`, `keyword_weight: 0.5`, `graph_weight: 0.5`. Default `fusion_method: "rrf"` (Reciprocal Rank Fusion) does not consume these weights — they only apply to the legacy `"weighted_linear"` path.
+**Drift (code defaults)**: `HybridRetriever.__init__` in `fastcode/retriever.py:70-72` still falls back to the older **0.6 / 0.3 / 0.1** triple when a config key is missing. Either the fallbacks should be aligned with the config, or the README should document that "balanced" is config-only.
 **Remaining**: `min_similarity: 0.15` is still low — cosine similarity below 0.3 is typically noise.
 
 ### RET-004: RRF Fusion is Well-Implemented
 
-**File**: `fastcode/retriever.py:980-1038`
-**Assessment**: The RRF implementation follows the standard formula `score(d) = sum(1 / (k + rank + 1))` with k=60. This is correct and well-documented. The weighted linear combination is preserved as a legacy alternative.
+**File**: `fastcode/retriever.py` — `_rrf_combine()` at line 980.
+**Assessment**: The RRF implementation follows the standard formula `score(d) = sum(1 / (k + rank + 1))` with k=60. Correct and well-documented. The weighted linear combination is preserved as a legacy alternative.
 
 ---
 
 ## 3. Test Coverage Analysis
 
-### Current State
+### Current State (refreshed 2026-04-18)
 
 | Metric | Value |
 |--------|-------|
-| Total test files | 16 (14 existing + 2 new) |
-| Collectible test files | 5 of 16 |
-| Tests passing | 77 (35 existing + 42 new) |
-| Tests failing | 8 (matryoshka — missing `anthropic` dep) |
-| Collection errors | 10 files (eager `__init__.py` imports) |
-| CI coverage threshold | 15% (GitLab) / 50% (GitHub Actions) |
+| Total test files | **19** (`tests/test_*.py`) |
+| Collectible without full deps | 5 of 19 (eager `__init__.py` still blocks the rest) |
+| Tests passing (full deps) | 77 baseline + new suites (graph/incremental/model-routing/semantic-cache/reranker/vector-stores) |
+| Tests failing | matryoshka when `anthropic` is absent |
+| Collection errors | remaining files — eager `fastcode/__init__.py` import chain (open: ROADMAP item) |
+| CI coverage threshold | 15% (GitLab, `--cov-fail-under=15` across `fastcode/` + `api` + `mcp_server`) / 50% (GitHub Actions, `api` + `mcp_server` only) |
+
+Authoritative test list (20 files including `__init__.py`):
+
+```
+test_api.py                                test_matryoshka.py
+test_delete_by_filter.py                   test_mcp_server.py
+test_embedding_providers.py                test_metadata_migration.py
+test_evaluation.py                         test_model_routing.py
+test_graph_enhanced_rag.py                 test_monkey.py
+test_graph_expansion.py                    test_reranker.py
+test_incremental_indexing.py               test_security.py
+test_incremental_indexing_regressions.py   test_semantic_cache.py
+test_language_expansion.py                 test_tree_sitter_parser.py
+                                           test_vector_stores.py
+```
 
 ### Root Cause of Collection Failures
 

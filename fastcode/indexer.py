@@ -5,7 +5,9 @@ Supports full indexing and incremental indexing (git-diff-based).
 """
 
 import hashlib
+import json
 import logging
+import os
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -45,6 +47,41 @@ class CodeElement:
 
 class CodeIndexer:
     """Index code repository at multiple levels"""
+
+    # ------------------------------------------------------------------
+    # Incremental indexing metadata (Phase 8) — sidecar JSON files record
+    # the last-indexed commit so subsequent runs can diff instead of re-
+    # indexing the whole tree. Staticmethods so unit tests can exercise
+    # the format without instantiating the full indexer.
+    # ------------------------------------------------------------------
+
+    _META_SCHEMA_VERSION = 1
+
+    @staticmethod
+    def _write_last_indexed_commit(meta_path: str, commit_sha: str) -> None:
+        """Persist ``commit_sha`` to ``meta_path`` (JSON sidecar)."""
+        os.makedirs(os.path.dirname(meta_path) or ".", exist_ok=True)
+        payload = {
+            "schema_version": CodeIndexer._META_SCHEMA_VERSION,
+            "last_indexed_commit": commit_sha,
+        }
+        with open(meta_path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh)
+
+    @staticmethod
+    def _read_last_indexed_commit(meta_path: str) -> str | None:
+        """Return the persisted commit SHA, or ``None`` if absent/corrupt."""
+        if not os.path.isfile(meta_path):
+            return None
+        try:
+            with open(meta_path, encoding="utf-8") as fh:
+                payload = json.load(fh)
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        sha = payload.get("last_indexed_commit")
+        return sha if isinstance(sha, str) else None
 
     def __init__(
         self,

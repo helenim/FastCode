@@ -246,7 +246,15 @@ class TestPickleSafety:
         """Verify we know all pickle.load sites for audit tracking."""
         import subprocess
         result = subprocess.run(
-            ["grep", "-rn", "pickle.load", "fastcode/", "mcp_server.py"],
+            [
+                "grep",
+                "-rn",
+                "--include=*.py",
+                "--exclude-dir=__pycache__",
+                "pickle.load",
+                "fastcode/",
+                "mcp_server.py",
+            ],
             capture_output=True,
             text=True,
             cwd=os.path.dirname(os.path.dirname(__file__)),

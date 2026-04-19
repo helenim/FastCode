@@ -1382,6 +1382,9 @@ def test_load_multiple_repositories_persists_manifest_for_each_repo():
         global_ns={
             "np": np,
             "VectorStore": FakeTempVectorStore,
+            # fastcode.main.load_multiple_repositories uses the factory to mint
+            # per-repo temp stores; route it through our fake.
+            "create_vector_store": lambda config: FakeTempVectorStore(config),
             "CodeIndexer": FakeCodeIndexer,
             "HybridRetriever": FakeRetriever,
             "CodeGraphBuilder": FakeGraphBuilder,

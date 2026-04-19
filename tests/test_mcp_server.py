@@ -36,7 +36,13 @@ def _fake_fastcode_package_for_mcp():
     def _get_repo_name_from_url(url: str) -> str:
         return "repo-from-url"
 
+    def _get_repo_name_from_path(path: str, workspace_root: str | None = None) -> str:
+        # Mirrors fastcode.utils.get_repo_name_from_path for the local-path branch.
+        import os as _os
+        return _os.path.basename(_os.path.normpath(path))
+
     utils_mod.get_repo_name_from_url = _get_repo_name_from_url  # type: ignore[attr-defined]
+    utils_mod.get_repo_name_from_path = _get_repo_name_from_path  # type: ignore[attr-defined]
     fc_pkg = types.ModuleType("fastcode")
     fc_pkg.utils = utils_mod  # type: ignore[attr-defined]
     return fc_pkg, utils_mod

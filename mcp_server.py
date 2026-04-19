@@ -253,6 +253,13 @@ def _ensure_repos_ready(repos: list[str], allow_incremental: bool = True, ctx=No
             return []
 
         workspace_root = getattr(getattr(fc, "loader", None), "safe_repo_root", None)
+        # Legacy-name collisions only matter when the loader exposes a
+        # workspace root to compare against; without it, any similarly-named
+        # sibling directory in an arbitrary pytest / tmp tree would spuriously
+        # flag as a collision.
+        if not workspace_root:
+            return []
+
         derived_name = get_repo_name_from_path(source, workspace_root=workspace_root)
         legacy_name = strip_repo_hash_suffix(derived_name)
         if not legacy_name or resolved_name != legacy_name or resolved_name == derived_name:

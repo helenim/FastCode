@@ -12,6 +12,50 @@ requires-python = ">=3.11"
 dependencies = [
     # Shared workspace contracts (Keycloak auth for MCP server)
     "ebridge-shared[auth]",
+    # Core
+    "python-dotenv",
+    "pyyaml",
+    "click",
+    # Repository management
+    "gitpython",
+    # Code parsing (AST + tree-sitter)
+    # tree-sitter-language-pack is optional (see [language-pack] extra); it pins
+    # tree-sitter to a version that conflicts with functiongemma-pipeline[bfcl]
+    # in the same workspace. Individual grammars are used as the default path.
+    "tree-sitter",
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "libcst",
+    # Embeddings & vector stores
+    "sentence-transformers",
+    "faiss-cpu",
+    "chromadb",
+    "httpx",
+    "qdrant-client>=1.9.0",
+    # Search & retrieval
+    "rank-bm25",
+    "networkx",
+    # LLM integration
+    "openai",
+    "anthropic",
+    "tiktoken",
+    # API
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "flask",
+    "flask-cors",
+    "python-multipart",
+    # Utilities
+    "tqdm",
+    "numpy",
+    "pandas",
+    "pathspec",
+    # Caching
+    "redis",
+    # MCP server
+    "mcp[cli]",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +72,9 @@ languages = [
     "tree-sitter-kotlin>=1.0.0",
     "tree-sitter-swift>=0.0.1",
 ]
+# Optional: full tree-sitter-language-pack (100+ grammars). Conflicts with
+# functiongemma-pipeline[bfcl] due to tree-sitter version pins.
+language-pack = ["tree-sitter-language-pack>=0.10.0"]
 
 [tool.setuptools.packages.find]
 include = ["fastcode*", "evaluation*"]

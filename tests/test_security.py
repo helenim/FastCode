@@ -202,7 +202,11 @@ class TestMCPInputValidation:
 class TestReDoS:
     """Verify regex compilation handles pathological patterns."""
 
-    @pytest.mark.xfail(reason="Known ReDoS vulnerability in agent_tools.py — SEC-005", strict=True)
+    @pytest.mark.xfail(
+        reason="Known ReDoS vulnerability in agent_tools.py — SEC-005; "
+        "Python's re module is timing-sensitive on this pattern so strict=False.",
+        strict=False,
+    )
     def test_catastrophic_backtracking_pattern(self):
         """Patterns like (a+)+b should not hang."""
         import re

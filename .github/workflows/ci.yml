@@ -1,3 +1,20 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Migrated to shared Python-service reusable workflow — 2026-04-20
+# See: docs/planning/github-actions-reusable-workflows-prd-2026-04-20.md §4 (B1 pilot)
+#
+# Before: 72 lines inline (2 jobs: lint + test matrix).
+# After : ~25 lines (reusable invocation + inputs).
+#
+# Behavior deltas from pre-migration:
+#  1. Added a `security` job (bandit + pip-audit). Previously absent. Catches
+#     supply-chain issues the pre-migration workflow didn't scan for.
+#  2. MyPy skipped (mypy_path="") — matches pre-migration (fastcode didn't run mypy).
+#  3. Multi-package coverage handled via pytest_extra_args — the single-package
+#     shortcut (coverage_package) can't express --cov=api --cov=mcp_server.
+#  4. Coverage gate stays at 50% (CLAUDE.md says "low — focus on integration
+#     correctness over unit coverage"). Re-baseline when the tests catch up.
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: CI
 
 on:
@@ -10,63 +27,19 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-lint-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-lint-
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Ruff check
-        run: ruff check .
-
-      - name: Ruff format check
-        run: ruff format --check .
-
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12"]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ matrix.python-version }}-
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Run tests with coverage
-        run: |
-          pytest --cov=api --cov=mcp_server --cov-fail-under=50 --cov-report=term-missing
+  ci:
+    uses: helenim/2d-studio-ebridge-platform/.github/workflows/python-service.yml@main
+    with:
+      # Test matrix — same as pre-migration
+      python_versions: '["3.11","3.12"]'
+      # Lint scope — whole repo (pre-migration was `ruff check .`)
+      package_path: "."
+      # No type-check — pre-migration didn't run mypy
+      mypy_path: ""
+      # Multi-package coverage via escape hatch
+      coverage_package: ""
+      coverage_target: "50"
+      pytest_extra_args: "--cov=api --cov=mcp_server"
+      # Security — added by migration (was absent)
+      run_security: true
+      bandit_path: "fastcode api.py mcp_server.py main.py web_app.py"

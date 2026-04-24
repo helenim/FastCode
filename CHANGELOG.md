@@ -12,6 +12,10 @@ the submodule pointer is the release artifact.
 
 ## [Unreleased]
 
+### 2026-04-18 — Opt-in query-result cache
+
+- **`FASTCODE_QUERY_CACHE=1` re-enables query-result caching** in [`fastcode/main.py`](fastcode/main.py:400). Default remains off so the evaluation harness keeps exercising the full iterative-agent path; production / MCP deployments where repeated stateless queries are expensive can opt in. Cache key is `{question}_{repo_filter}` + `repo_hash`; TTL / size governed by existing `CacheManager` config. On hit, logs `fastcode_query_cache_hit` with `cache_key` + `repo_hash` so hit rate is observable without a dedicated Prometheus counter. Reuses the `CacheManager` infrastructure already present at [`fastcode/cache.py`](fastcode/cache.py) — no new dependencies.
+
 ### Security
 
 - Path traversal: `is_safe_path()` now uses an `os.sep`-aware `_is_within_root()`

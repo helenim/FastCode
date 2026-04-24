@@ -602,14 +602,14 @@ FastCode can run as an [MCP (Model Context Protocol)](https://modelcontextprotoc
 
 Add the following to your MCP configuration:
 
-Before configuring MCP, make sure FastCode dependencies are installed in the local uv virtual environment:
+Before configuring MCP, make sure FastCode dependencies are installed in a local virtual environment (this repo pins to `pip` + `requirements.txt` — see [CLAUDE.md](CLAUDE.md)):
 
 ```bash
 git clone https://github.com/HKUDS/FastCode.git
 cd FastCode
-uv venv --python=3.12
+python3.12 -m venv .venv
 source .venv/bin/activate
-uv pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 The MCP server should be launched with `.venv/bin/python`, and it needs `OPENAI_API_KEY`, `MODEL`, and `BASE_URL`.
@@ -622,7 +622,7 @@ The MCP server should be launched with `.venv/bin/python`, and it needs `OPENAI_
       "command": "/path/to/FastCode/.venv/bin/python",
       "args": ["/path/to/FastCode/mcp_server.py"],
       "env": {
-        "MODEL": "gpt-5.2",
+        "MODEL": "your-model",
         "BASE_URL": "https://api.openai.com/v1",
         "OPENAI_API_KEY": "sk-..."
       }
@@ -639,7 +639,7 @@ The MCP server should be launched with `.venv/bin/python`, and it needs `OPENAI_
       "command": "/path/to/FastCode/.venv/bin/python",
       "args": ["/path/to/FastCode/mcp_server.py"],
       "env": {
-        "MODEL": "gpt-5.2",
+        "MODEL": "your-model",
         "BASE_URL": "https://api.openai.com/v1",
         "OPENAI_API_KEY": "sk-..."
       }
@@ -653,11 +653,13 @@ Or via `claude mcp add` (ensure the same env vars are available in your shell):
 claude mcp add fastcode -- /path/to/FastCode/.venv/bin/python /path/to/FastCode/mcp_server.py
 ```
 
-**SSE transport** (for remote / shared deployments):
+**Streamable-HTTP transport** (recommended for remote / shared deployments — `sse` is still wired for legacy clients but deprecated upstream):
 ```bash
-OPENAI_API_KEY=sk-... MODEL=gpt-5.2 BASE_URL=https://api.openai.com/v1 \
-/path/to/FastCode/.venv/bin/python /path/to/FastCode/mcp_server.py --transport sse --port 8080
+OPENAI_API_KEY=sk-... MODEL=your-model BASE_URL=https://api.openai.com/v1 \
+/path/to/FastCode/.venv/bin/python /path/to/FastCode/mcp_server.py --transport streamable-http --port 8080
 ```
+
+Clients then connect at `http://host:8080/mcp`.
 
 #### Available Tools
 

@@ -37,7 +37,7 @@ _DEFAULT_API_HOST = "0.0.0.0"  # nosec B104
 
 # --- Keycloak JWT authentication ---
 try:
-    from ebridge_auth import KeycloakAuth, TokenUser
+    from ebridge_auth import KeycloakAuth
 
     _auth = KeycloakAuth(
         server_url=os.getenv("KEYCLOAK_URL", "http://keycloak:8080"),
@@ -47,16 +47,14 @@ try:
     _get_user = _auth.get_current_user()
 except ImportError:
     _get_user = None  # type: ignore[assignment]
-    TokenUser = None  # type: ignore[assignment, misc]
 
 # Build list of dependencies for authenticated routes — fail-closed when auth unavailable
 if _get_user is not None:
     _auth_dependencies = [Depends(_get_user)]
 else:
-    from fastapi import HTTPException as _HTTPException
 
     async def _reject_no_auth():
-        raise _HTTPException(
+        raise HTTPException(
             status_code=503, detail="Authentication service unavailable"
         )
 
@@ -386,7 +384,9 @@ async def index_multiple(request: IndexMultipleRequest):
 
     try:
         logger.info(f"Indexing {len(request.sources)} repositories")
-        fastcode.load_multiple_repositories([s.dict() for s in request.sources])
+        fastcode.load_multiple_repositories(
+            [s.model_dump() for s in request.sources]
+        )
 
         fastcode.vector_store.invalidate_scan_cache()
 

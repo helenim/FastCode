@@ -105,7 +105,7 @@ def _repo_name_from_source(source: str, is_url: bool) -> str:
         return repo_name
 
     legacy_name = strip_repo_hash_suffix(repo_name)
-    if repo_index_files_exist(persist_dir, legacy_name):
+    if legacy_name and repo_index_files_exist(persist_dir, legacy_name):
         return legacy_name
 
     return repo_name
@@ -214,7 +214,9 @@ def _run_full_reindex(
     if repo_name:
         reindex_fc.repo_info["name"] = repo_name
         if hasattr(reindex_fc.loader, "repo_name"):
-            reindex_fc.loader.repo_name = repo_name
+            # loader.repo_name is initialized as None on the fastcode side;
+            # narrowing happens at runtime via hasattr.
+            reindex_fc.loader.repo_name = repo_name  # type: ignore[assignment]
 
     reindex_fc.index_repository(force=True)
     count = reindex_fc.vector_store.get_count()
@@ -291,7 +293,10 @@ def _ensure_repos_ready(repos: list[str], allow_incremental: bool = True, ctx=No
     for source in repos:
         resolved_is_url = fc._infer_is_url(source)
         name = _repo_name_from_source(source, resolved_is_url)
-        abs_path = os.path.abspath(source) if not resolved_is_url else None
+        # abs_path is only meaningful when source is a local path; computed
+        # unconditionally to keep its type `str` for downstream checks (URL
+        # branches never read it).
+        abs_path = os.path.abspath(source)
 
         # Already indexed
         if _is_repo_indexed(name):
@@ -906,7 +911,7 @@ def get_call_chain(
                 target_elem, target_id = elem, eid
                 break
 
-    if not target_id:
+    if not target_id or target_elem is None:
         return f"Symbol '{symbol_name}' not found in call graph."
 
     parts = [

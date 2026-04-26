@@ -957,6 +957,176 @@ def reindex_repo(repo_source: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# ebridge workspace-aware multi-repo facade
+#
+# These three tools sit on top of code_qa / search_symbol and expand the
+# ``repos`` parameter automatically by reading the workspace layout
+# (``2d-studio-*`` submodules + in-tree ``shared/ebridge_*`` packages).
+# Useful when an agent doesn't know the names of the workspace repos in
+# advance — e.g. "what calls shared/ebridge_auth.User?" or
+# "summarise how the LLM gateway works across the platform".
+# ---------------------------------------------------------------------------
+
+
+def _load_workspace_registry():
+    """Lazy import so the registry doesn't pull in fastcode internals."""
+    from fastcode.workspace_registry import load_registry
+
+    return load_registry()
+
+
+def _indexed_names_safe() -> set[str]:
+    """Return the set of repo names FastCode currently has on disk indices for.
+
+    Wrapped in a try/except so the workspace-aware tools degrade gracefully
+    when FastCode hasn't been fully initialized (e.g. fresh checkout).
+    """
+    try:
+        fc = _get_fastcode()
+        available = fc.vector_store.scan_available_indexes(use_cache=True)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Could not scan available indexes: %s", exc)
+        return set()
+    names: set[str] = set()
+    for repo in available:
+        n = repo.get("name") or repo.get("repo_name")
+        if isinstance(n, str):
+            names.add(n)
+    return names
+
+
+@mcp.tool()
+def list_workspace_repos(code_only: bool = False) -> str:
+    """List every repo in the ebridge workspace with its FastCode-indexed status.
+
+    Discovers repos from the workspace layout (no manual configuration required):
+    the ``2d-studio-*`` git submodules plus the in-tree ``shared/ebridge_*``
+    packages. Each entry is annotated with whether FastCode has an on-disk index
+    today, so callers know which repos are queryable without re-indexing.
+
+    Args:
+        code_only: When True, hide repos that have no recognised code marker
+                   (e.g. docs-only submodules). Default: False.
+
+    Returns:
+        A human-readable, line-oriented summary suitable for direct LLM consumption.
+    """
+    try:
+        registry = _load_workspace_registry()
+    except RuntimeError as exc:
+        return f"Error: {exc}"
+    indexed = _indexed_names_safe()
+    rows = registry.to_payload(indexed_names=indexed)
+    if code_only:
+        rows = [r for r in rows if r["is_code"]]
+    if not rows:
+        return "No workspace repos discovered."
+    lines = [f"Workspace root: {registry.root}", f"Repos: {len(rows)}", ""]
+    for row in rows:
+        flag_indexed = "indexed" if row["is_indexed"] else "not-indexed"
+        flag_code = ",".join(row["classes"]) or "docs"
+        lines.append(f"  - {row['name']} [{flag_code}] ({flag_indexed})")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def query_all_repos(
+    question: str,
+    max_repos: int = 10,
+    indexed_only: bool = True,
+    code_only: bool = True,
+    session_id: str | None = None,
+) -> str:
+    """Ask a question across the entire ebridge workspace.
+
+    Equivalent to calling ``code_qa`` with every workspace repo enumerated
+    explicitly, but the registry takes care of the listing. Capped at
+    ``max_repos`` (default 10, FastCode hard limit is 20) to keep cost
+    bounded. By default only currently-indexed code repos are included so
+    the call is cheap and predictable; set ``indexed_only=False`` to let
+    FastCode auto-index missing repos at query time.
+
+    Args:
+        question: The cross-repo question to ask.
+        max_repos: Cap on how many repos are forwarded to ``code_qa`` (1-20).
+        indexed_only: Restrict to repos that already have a FastCode index.
+        code_only: Skip docs-only repos.
+        session_id: Optional session id for multi-turn continuity.
+
+    Returns:
+        ``code_qa`` answer text (with sources).
+    """
+    try:
+        registry = _load_workspace_registry()
+    except RuntimeError as exc:
+        return f"Error: {exc}"
+    bound = max(1, min(max_repos, 20))
+    indexed = _indexed_names_safe()
+    selected: list[str] = []
+    for repo in registry.repos:
+        if code_only and not repo.is_code:
+            continue
+        if indexed_only and repo.name not in indexed:
+            continue
+        selected.append(str(repo.path))
+        if len(selected) >= bound:
+            break
+    if not selected:
+        scope = "indexed code" if indexed_only and code_only else "matching"
+        return (
+            f"No {scope} repos found in workspace. Run reindex_repo on the "
+            "repos you want to query first, or call this tool with "
+            "indexed_only=False to let FastCode index them on demand."
+        )
+    return code_qa(question=question, repos=selected, session_id=session_id)
+
+
+@mcp.tool()
+def cross_repo_blast_radius(
+    symbol_name: str,
+    symbol_type: str | None = None,
+    code_only: bool = True,
+) -> str:
+    """Find every callsite of a symbol across all indexed workspace repos.
+
+    Convenience wrapper around ``search_symbol`` that automatically scopes
+    the search to every FastCode-indexed code repo in the workspace. Use
+    this when assessing the blast radius of an upcoming rename or signature
+    change — e.g. ``cross_repo_blast_radius("User", "class")``.
+
+    Args:
+        symbol_name: Symbol identifier (case-insensitive ranked match).
+        symbol_type: Optional filter (function | class | file | documentation).
+        code_only: Skip docs-only repos. Default: True.
+
+    Returns:
+        ``search_symbol`` style ranked listing across all qualifying repos.
+    """
+    try:
+        registry = _load_workspace_registry()
+    except RuntimeError as exc:
+        return f"Error: {exc}"
+    indexed = _indexed_names_safe()
+    selected: list[str] = []
+    for repo in registry.repos:
+        if code_only and not repo.is_code:
+            continue
+        if repo.name not in indexed:
+            continue
+        selected.append(str(repo.path))
+    if not selected:
+        return (
+            "No indexed code repos in workspace. Run reindex_repo on the "
+            "repos you care about, then retry."
+        )
+    return search_symbol(
+        symbol_name=symbol_name,
+        repos=selected,
+        symbol_type=symbol_type,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

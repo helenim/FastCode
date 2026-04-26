@@ -24,9 +24,20 @@ services:
       - ./data:/app/data
       - ./repos:/app/repos
       - ./logs:/app/logs
+
+      # ebridge workspace root (read-only) — enables the workspace-aware
+      # MCP tools (list_workspace_repos / query_all_repos /
+      # cross_repo_blast_radius). Set EBRIDGE_WORKSPACE_HOST to the
+      # absolute host path of the workspace; default mounts the parent
+      # directory of this submodule (which is the workspace root in the
+      # standard ebridge checkout layout).
+      - ${EBRIDGE_WORKSPACE_HOST:-..}:/workspace:ro
     environment:
       - PYTHONUNBUFFERED=1
       - TOKENIZERS_PARALLELISM=false
+      # Tells the workspace registry where to find the ebridge tree inside
+      # the container. Must match the read-only volume mount above.
+      - EBRIDGE_WORKSPACE_ROOT=/workspace
     restart: unless-stopped
 
   nanobot:

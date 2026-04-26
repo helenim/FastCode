@@ -14,6 +14,21 @@ from openai import OpenAI
 from .llm_utils import openai_chat_completion
 
 
+def filter_pool_by_namespace(available: list[str], namespace: str | None) -> list[str]:
+    """Pre-filter a repo-name pool to a single tenant namespace.
+
+    A repo name shaped ``"<ns>/<name>"`` is considered tenant-scoped; bare
+    names (no slash) are treated as shared / namespace-agnostic and stay in
+    every pool. Pure helper — no I/O, no LLM, no logger — so it can be
+    tested without touching the heavy ``RepositorySelector.__init__`` path
+    (which pulls in the OpenAI / Anthropic SDKs).
+    """
+    if not namespace:
+        return available
+    prefix = f"{namespace}/"
+    return [n for n in available if "/" not in n or n.startswith(prefix)]
+
+
 class RepositorySelector:
     """Use LLM to select relevant repositories and files based on user query"""
 
@@ -377,7 +392,13 @@ class RepositorySelector:
         name = name.strip().strip("`").strip("*").strip("'").strip('"')
         return name.lower()
 
-    def _fuzzy_match_repo(self, candidate: str, available: list[str]) -> str | None:
+    def _fuzzy_match_repo(
+        self,
+        candidate: str,
+        available: list[str],
+        *,
+        namespace: str | None = None,
+    ) -> str | None:
         """
         Try to match *candidate* (the string the LLM returned) to one of the
         *available* repository names using several heuristics, from strict to
@@ -387,8 +408,12 @@ class RepositorySelector:
         2. Substring containment - candidate inside a real name or vice-versa
         3. Simple token-overlap ratio (Jaccard on alphanumeric tokens)
 
+        When ``namespace`` is provided (workspace-aware multi-tenant lookups),
+        the candidate pool is pre-filtered via :func:`filter_pool_by_namespace`.
+
         Returns the best matching name, or None.
         """
+        available = filter_pool_by_namespace(available, namespace)
         norm_candidate = self._normalize(candidate)
         if not norm_candidate:
             self.logger.info(

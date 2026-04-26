@@ -13,6 +13,7 @@ from typing import Any
 import faiss
 import numpy as np
 
+from .tenant_context import current_tenant_id
 from .utils import ensure_dir
 
 # ---------------------------------------------------------------------------
@@ -259,6 +260,23 @@ class VectorStore:
                 "VectorStore running in in-memory mode; persistence disabled."
             )
 
+    # ------------------------------------------------------------------
+    # Tenant-scoped artifact paths
+    # ------------------------------------------------------------------
+    def _tenant_dir(self) -> str:
+        """Return the artifact directory for the active tenant.
+
+        Resolves to ``<persist_dir>/<tenant_id>/`` and ensures the directory
+        exists. ``tenant_id`` is read from the request-scoped contextvar in
+        ``fastcode.tenant_context`` (falls back to the ``EBRIDGE_TENANT_ID``
+        env var, then to the workspace-default ``"_default"``).
+        """
+        tenant = current_tenant_id()
+        path = os.path.join(self.persist_dir, tenant)
+        if not self.in_memory:
+            ensure_dir(path)
+        return path
+
     def initialize(self, dimension: int):
         """
         Initialize the vector store
@@ -426,7 +444,7 @@ class VectorStore:
             self.logger.info(f"Stored repository overview for {repo_name} (in-memory)")
             return
 
-        overview_path = os.path.join(self.persist_dir, "repo_overviews.pkl")
+        overview_path = os.path.join(self._tenant_dir(), "repo_overviews.pkl")
 
         # Load existing overviews if they exist
         overviews = {}
@@ -470,7 +488,7 @@ class VectorStore:
                 return True
             return False
 
-        overview_path = os.path.join(self.persist_dir, "repo_overviews.pkl")
+        overview_path = os.path.join(self._tenant_dir(), "repo_overviews.pkl")
         if not os.path.exists(overview_path):
             return False
 
@@ -504,7 +522,7 @@ class VectorStore:
             # Return the in-memory overviews when persistence is disabled.
             return self._in_memory_repo_overviews
 
-        overview_path = os.path.join(self.persist_dir, "repo_overviews.pkl")
+        overview_path = os.path.join(self._tenant_dir(), "repo_overviews.pkl")
 
         if not os.path.exists(overview_path):
             self.logger.info("No repository overviews found")
@@ -686,8 +704,9 @@ class VectorStore:
             self.logger.warning("No index to save")
             return
 
-        index_path = os.path.join(self.persist_dir, f"{name}.faiss")
-        metadata_path = os.path.join(self.persist_dir, f"{name}_metadata.jsonl")
+        tenant_dir = self._tenant_dir()
+        index_path = os.path.join(tenant_dir, f"{name}.faiss")
+        metadata_path = os.path.join(tenant_dir, f"{name}_metadata.jsonl")
 
         # Save FAISS index
         faiss.write_index(self.index, index_path)
@@ -721,15 +740,16 @@ class VectorStore:
             self.logger.info("Skipping vector store load (in-memory mode enabled)")
             return False
 
-        index_path = os.path.join(self.persist_dir, f"{name}.faiss")
-        jsonl_path = os.path.join(self.persist_dir, f"{name}_metadata.jsonl")
-        pkl_path = os.path.join(self.persist_dir, f"{name}_metadata.pkl")
+        tenant_dir = self._tenant_dir()
+        index_path = os.path.join(tenant_dir, f"{name}.faiss")
+        jsonl_path = os.path.join(tenant_dir, f"{name}_metadata.jsonl")
+        pkl_path = os.path.join(tenant_dir, f"{name}_metadata.pkl")
 
         if not os.path.exists(index_path):
-            self.logger.warning(f"Index files not found in {self.persist_dir}")
+            self.logger.warning(f"Index files not found in {tenant_dir}")
             return False
         if not os.path.exists(jsonl_path) and not os.path.exists(pkl_path):
-            self.logger.warning(f"Metadata files not found in {self.persist_dir}")
+            self.logger.warning(f"Metadata files not found in {tenant_dir}")
             return False
 
         try:
@@ -781,9 +801,10 @@ class VectorStore:
             self.logger.info("Skipping merge_from_index (in-memory mode enabled)")
             return False
 
-        index_path = os.path.join(self.persist_dir, f"{index_name}.faiss")
-        jsonl_path = os.path.join(self.persist_dir, f"{index_name}_metadata.jsonl")
-        pkl_path = os.path.join(self.persist_dir, f"{index_name}_metadata.pkl")
+        tenant_dir = self._tenant_dir()
+        index_path = os.path.join(tenant_dir, f"{index_name}.faiss")
+        jsonl_path = os.path.join(tenant_dir, f"{index_name}_metadata.jsonl")
+        pkl_path = os.path.join(tenant_dir, f"{index_name}_metadata.pkl")
 
         if not os.path.exists(index_path):
             self.logger.warning(f"Index files not found for {index_name}")
@@ -957,14 +978,17 @@ class VectorStore:
         # Perform actual scan
         self.logger.info("Scanning available indexes...")
 
-        for file in os.listdir(self.persist_dir):
+        tenant_dir = self._tenant_dir()
+        if not os.path.isdir(tenant_dir):
+            return []
+        for file in os.listdir(tenant_dir):
             if file.endswith(".faiss"):
                 repo_name = file.replace(".faiss", "")
                 jsonl_file = os.path.join(
-                    self.persist_dir, f"{repo_name}_metadata.jsonl"
+                    tenant_dir, f"{repo_name}_metadata.jsonl"
                 )
                 pkl_file = os.path.join(
-                    self.persist_dir, f"{repo_name}_metadata.pkl"
+                    tenant_dir, f"{repo_name}_metadata.pkl"
                 )
                 # Prefer JSONL when available; fall back to pickle for
                 # legacy deployments.
@@ -975,7 +999,7 @@ class VectorStore:
                 if os.path.exists(metadata_file):
                     try:
                         # Get file sizes (fast operation)
-                        index_path = os.path.join(self.persist_dir, file)
+                        index_path = os.path.join(tenant_dir, file)
                         file_size = os.path.getsize(index_path)
                         metadata_size = os.path.getsize(metadata_file)
                         total_size_mb = (file_size + metadata_size) / (1024 * 1024)

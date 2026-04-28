@@ -36,6 +36,7 @@ node_modules/
 # IDEs
 .vscode/
 .idea/
+*.code-workspace
 *.swp
 *.swo
 *~

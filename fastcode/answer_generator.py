@@ -44,30 +44,82 @@ class AnswerGenerator:
         # Load environment variables from .env file
         load_dotenv()
 
-        # Initialize LLM client
+        # Capture provider config for lazy client construction. The actual
+        # OpenAI / Anthropic client is built on first use via the `client`
+        # property below — see commit 2026-04-29 (FastCode bring-up runbook
+        # bug #7): constructing the client at __init__ time fails when the
+        # API key is unset, which previously crashed indexing too. Indexing
+        # does not need the LLM client; only generate() / generate_stream()
+        # do. Deferring construction lets the indexer run without an LLM
+        # provider, and surfaces missing-key errors only at query time
+        # (which the existing `if self.client is None` guards already
+        # handle gracefully).
         self.api_key = os.getenv("OPENAI_API_KEY")
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
         self.base_url = os.getenv("BASE_URL")
         self.model = os.getenv("MODEL")
-        self.client = self._initialize_client()
+        self._client: Any = None
+        self._client_initialised = False
 
-    def _initialize_client(self):
-        """Initialize LLM client based on provider"""
+    @property
+    def client(self) -> Any:
+        """Lazy-construct the LLM client on first access.
+
+        Returns None when the configured provider can't be initialised
+        (missing API key, unknown provider, construction error). The
+        callers in `_generate_*` already guard with `if self.client is
+        None` and return / yield a structured error to the user, so
+        a None here degrades gracefully — it never crashes the
+        AnswerGenerator (or by extension, the indexer that constructs
+        AnswerGenerator at startup).
+        """
+        if not self._client_initialised:
+            self._client_initialised = True
+            try:
+                self._client = self._initialise_client()
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warning(
+                    "LLM client construction failed (%s); query endpoints "
+                    "will return a structured error until this is resolved.",
+                    exc,
+                )
+                self._client = None
+        return self._client
+
+    def _initialise_client(self) -> Any:
+        """Initialise LLM client based on provider. May raise — caller
+        guards via the `client` property."""
         if self.provider == "openai":
-            api_key = self.api_key
-            if not api_key:
-                self.logger.warning("OPENAI_API_KEY not set")
-            return OpenAI(api_key=api_key, base_url=self.base_url)
+            if not self.api_key:
+                self.logger.warning(
+                    "OPENAI_API_KEY not set — OpenAI client cannot be "
+                    "constructed; query endpoints will return a "
+                    "structured error. Indexing endpoints continue to "
+                    "function normally."
+                )
+                return None
+            return OpenAI(api_key=self.api_key, base_url=self.base_url)
 
-        elif self.provider == "anthropic":
-            api_key = self.anthropic_api_key
-            if not api_key:
-                self.logger.warning("ANTHROPIC_API_KEY not set")
-            return Anthropic(api_key=api_key, base_url=self.base_url)
+        if self.provider == "anthropic":
+            if not self.anthropic_api_key:
+                self.logger.warning(
+                    "ANTHROPIC_API_KEY not set — Anthropic client cannot "
+                    "be constructed; query endpoints will return a "
+                    "structured error. Indexing endpoints continue to "
+                    "function normally."
+                )
+                return None
+            return Anthropic(
+                api_key=self.anthropic_api_key, base_url=self.base_url
+            )
 
-        else:
-            self.logger.warning(f"Unknown provider: {self.provider}")
-            return None
+        self.logger.warning("Unknown provider: %s", self.provider)
+        return None
+
+    # Backwards-compatible alias so external callers that referenced the
+    # private name still work. New code should use `client` (the property).
+    def _initialize_client(self) -> Any:
+        return self._initialise_client()
 
     def generate(
         self,

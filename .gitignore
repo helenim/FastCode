@@ -36,6 +36,7 @@ node_modules/
 # IDEs
 .vscode/
 .idea/
+.ebridge/
 *.code-workspace
 *.swp
 *.swo

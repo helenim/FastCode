@@ -25,7 +25,6 @@ class FaissVectorStore(VectorStore):
         file_set = set(file_paths)
         return self.delete_by_filter(
             lambda meta: (
-                meta.get("repo_name") == repo_name
-                and meta.get("file_path") in file_set
+                meta.get("repo_name") == repo_name and meta.get("file_path") in file_set
             )
         )

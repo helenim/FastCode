@@ -22,6 +22,7 @@ def _get_httpx():
     global _httpx
     if _httpx is None:
         import httpx
+
         _httpx = httpx
     return _httpx
 
@@ -45,9 +46,7 @@ class APIProvider:
         api_key_env = api_cfg.get("api_key_env", "EMBEDDING_API_KEY")
         self._api_key: str = os.getenv(api_key_env, api_cfg.get("api_key", ""))
 
-        self._batch_size: int = api_cfg.get(
-            "batch_size", emb_cfg.get("batch_size", 32)
-        )
+        self._batch_size: int = api_cfg.get("batch_size", emb_cfg.get("batch_size", 32))
         self._normalize: bool = api_cfg.get(
             "normalize_embeddings", emb_cfg.get("normalize_embeddings", True)
         )
@@ -57,7 +56,8 @@ class APIProvider:
         # Probe dimension
         logger.info(
             "Initializing API embedding provider: model=%s url=%s",
-            self._model_name, self._base_url,
+            self._model_name,
+            self._base_url,
         )
         probe = self._call_api(["test"])
         self._embedding_dim: int = probe.shape[1]

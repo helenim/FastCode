@@ -97,9 +97,7 @@ class _PickleFileCache:
     def _prune_to_limit(self) -> None:
         if not self._size_limit or self.volume() <= self._size_limit:
             return
-        files = sorted(
-            self._entries.glob("*.fcache"), key=lambda p: p.stat().st_mtime
-        )
+        files = sorted(self._entries.glob("*.fcache"), key=lambda p: p.stat().st_mtime)
         target = int(self._size_limit * 0.85)
         for path in files:
             if self.volume() <= target:
@@ -139,7 +137,9 @@ class CacheManager:
         if self.backend == "disk":
             Path(self.cache_directory).mkdir(parents=True, exist_ok=True)
             max_size_bytes = self.max_size_mb * 1024 * 1024
-            self.cache = _PickleFileCache(self.cache_directory, size_limit=max_size_bytes)
+            self.cache = _PickleFileCache(
+                self.cache_directory, size_limit=max_size_bytes
+            )
             self.logger.info(f"Initialized disk cache at {self.cache_directory}")
 
         elif self.backend == "redis":
@@ -729,7 +729,9 @@ class _ScopedCache:
         new_index = faiss.IndexFlatIP(self._dim)
         # We don't store the vectors separately, so we must reconstruct them
         if self._index.ntotal > keep_from:
-            vectors = np.zeros((self._index.ntotal - keep_from, self._dim), dtype=np.float32)
+            vectors = np.zeros(
+                (self._index.ntotal - keep_from, self._dim), dtype=np.float32
+            )
             for i in range(keep_from, self._index.ntotal):
                 vectors[i - keep_from] = self._index.reconstruct(i)
             new_index.add(vectors)

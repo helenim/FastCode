@@ -307,12 +307,12 @@ class QueryProcessor:
 
         # Intent-based scoring
         intent_scores = {
-            "find": -10,      # Simple lookup
-            "where": -10,     # Location query
-            "what": 0,        # Definition query
-            "explain": 15,    # Requires synthesis
-            "how": 20,        # Requires understanding
-            "debug": 25,      # Requires reasoning about failures
+            "find": -10,  # Simple lookup
+            "where": -10,  # Location query
+            "what": 0,  # Definition query
+            "explain": 15,  # Requires synthesis
+            "how": 20,  # Requires understanding
+            "debug": 25,  # Requires reasoning about failures
             "implement": 30,  # Requires code generation
         }
         score += intent_scores.get(intent, 0)
@@ -1030,10 +1030,12 @@ Be concise and focus on improving code retrieval accuracy."""
 
         for prefix in prefixes_to_remove:
             if rewritten.lower().startswith(prefix):
-                rewritten = rewritten[len(prefix):].strip()
+                rewritten = rewritten[len(prefix) :].strip()
 
         # Remove quotes if present
-        if (rewritten.startswith('"') and rewritten.endswith('"')) or (rewritten.startswith("'") and rewritten.endswith("'")):
+        if (rewritten.startswith('"') and rewritten.endswith('"')) or (
+            rewritten.startswith("'") and rewritten.endswith("'")
+        ):
             rewritten = rewritten[1:-1]
 
         return rewritten if rewritten else None

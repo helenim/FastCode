@@ -26,10 +26,11 @@ graph in until a tool is actually called.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 # Marker files that flag a repo as code-bearing. Order is irrelevant — any
 # match flips the corresponding language tag.

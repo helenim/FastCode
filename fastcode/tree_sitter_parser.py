@@ -106,7 +106,8 @@ class TSParser:
         except Exception as e:
             self.logger.error(
                 "Failed to initialize tree-sitter parser for %s: %s",
-                self.current_language_name, e,
+                self.current_language_name,
+                e,
             )
             raise
 
@@ -147,14 +148,17 @@ class TSParser:
                             "tree-sitter package '%s' for language '%s' is "
                             "not installed; files in this language will be "
                             "skipped. (%s)",
-                            module_name, language_name, exc,
+                            module_name,
+                            language_name,
+                            exc,
                         )
                         _UNAVAILABLE_LANGUAGES.add(language_name)
                 else:
                     lang = Language(getattr(mod, func_name)())
                     self.logger.debug(
                         "Loaded '%s' from individual package %s",
-                        language_name, module_name,
+                        language_name,
+                        module_name,
                     )
 
         if lang is None:

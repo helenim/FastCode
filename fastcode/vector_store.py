@@ -95,9 +95,7 @@ def save_metadata_jsonl(
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(json.dumps(header, ensure_ascii=False) + "\n")
         for meta in metadata:
-            f.write(
-                json.dumps(_metadata_to_jsonable(meta), ensure_ascii=False) + "\n"
-            )
+            f.write(json.dumps(_metadata_to_jsonable(meta), ensure_ascii=False) + "\n")
     os.replace(tmp, path)
 
 
@@ -984,17 +982,11 @@ class VectorStore:
         for file in os.listdir(tenant_dir):
             if file.endswith(".faiss"):
                 repo_name = file.replace(".faiss", "")
-                jsonl_file = os.path.join(
-                    tenant_dir, f"{repo_name}_metadata.jsonl"
-                )
-                pkl_file = os.path.join(
-                    tenant_dir, f"{repo_name}_metadata.pkl"
-                )
+                jsonl_file = os.path.join(tenant_dir, f"{repo_name}_metadata.jsonl")
+                pkl_file = os.path.join(tenant_dir, f"{repo_name}_metadata.pkl")
                 # Prefer JSONL when available; fall back to pickle for
                 # legacy deployments.
-                metadata_file = (
-                    jsonl_file if os.path.exists(jsonl_file) else pkl_file
-                )
+                metadata_file = jsonl_file if os.path.exists(jsonl_file) else pkl_file
 
                 if os.path.exists(metadata_file):
                     try:
@@ -1035,8 +1027,7 @@ class VectorStore:
                             # Estimate total file count based on sample
                             if sample_size > 0 and sample_size < len(metadata_list):
                                 file_count = int(
-                                    len(seen_files)
-                                    * (len(metadata_list) / sample_size)
+                                    len(seen_files) * (len(metadata_list) / sample_size)
                                 )
                             else:
                                 file_count = len(seen_files)

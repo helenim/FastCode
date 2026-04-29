@@ -230,7 +230,9 @@ class FastCode:
             repo_url = self.repo_info.get("url")
 
             # Index code elements with repository information
-            elements = self.indexer.index_repository(repo_name=repo_name, repo_url=repo_url)
+            elements = self.indexer.index_repository(
+                repo_name=repo_name, repo_url=repo_url
+            )
 
             # Single-repository indexing should always build a fresh in-memory
             # index so saved artifacts never mix metadata from prior repos.
@@ -318,7 +320,10 @@ class FastCode:
                 # Save BM25 and graph data
                 self.retriever.save_bm25(repo_name)
                 self.graph_builder.save(repo_name)
-                self._save_file_manifest(repo_name, self._build_file_manifest(elements, self.loader.repo_path))
+                self._save_file_manifest(
+                    repo_name,
+                    self._build_file_manifest(elements, self.loader.repo_path),
+                )
             else:
                 self.logger.info(
                     "Skipping on-disk persistence (ephemeral/evaluation mode)"
@@ -403,9 +408,12 @@ class FastCode:
         # production / MCP deployments where stateless repeat queries are
         # cheap to serve from cache. TTL and size are governed by the
         # existing ``CacheManager`` config fields.
-        query_cache_enabled = os.getenv(
-            "FASTCODE_QUERY_CACHE", ""
-        ).strip().lower() in {"1", "true", "yes", "on"}
+        query_cache_enabled = os.getenv("FASTCODE_QUERY_CACHE", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         use_cache = (
             query_cache_enabled
             and (not enable_multi_turn or not session_id)
@@ -417,12 +425,9 @@ class FastCode:
         if use_cache:
             repo_hash = self._get_repo_hash()
             cache_key = (
-                f"{question}_"
-                f"{','.join(sorted(repo_filter)) if repo_filter else 'all'}"
+                f"{question}_{','.join(sorted(repo_filter)) if repo_filter else 'all'}"
             )
-            cached_result = self.cache_manager.get_query_result(
-                cache_key, repo_hash
-            )
+            cached_result = self.cache_manager.get_query_result(cache_key, repo_hash)
             if cached_result:
                 self.logger.info(
                     "fastcode_query_cache_hit",
@@ -792,7 +797,9 @@ class FastCode:
                 # Load BM25 index
                 bm25_loaded = self.retriever.load_bm25(cache_name)
                 if not bm25_loaded:
-                    self.logger.warning("Failed to load BM25 index, will need to rebuild")
+                    self.logger.warning(
+                        "Failed to load BM25 index, will need to rebuild"
+                    )
 
                 # Build separate repo overview BM25 index
                 self.retriever.build_repo_overview_bm25()
@@ -801,11 +808,15 @@ class FastCode:
                 fresh_graph_builder = CodeGraphBuilder(self.config)
                 graph_loaded = fresh_graph_builder.load(cache_name)
                 if not graph_loaded:
-                    self.logger.warning("Failed to load graph data, will need to rebuild")
+                    self.logger.warning(
+                        "Failed to load graph data, will need to rebuild"
+                    )
 
                 # If BM25 or graph failed to load, reconstruct from metadata
                 if not bm25_loaded or not graph_loaded:
-                    self.logger.info("Reconstructing missing components from metadata...")
+                    self.logger.info(
+                        "Reconstructing missing components from metadata..."
+                    )
                     elements = (
                         self.retriever.full_bm25_elements
                         if bm25_loaded and self.retriever.full_bm25_elements
@@ -815,7 +826,9 @@ class FastCode:
                     if elements:
                         if not bm25_loaded:
                             self.retriever.index_for_bm25(elements)
-                            self.logger.info(f"Rebuilt BM25 index with {len(elements)} elements")
+                            self.logger.info(
+                                f"Rebuilt BM25 index with {len(elements)} elements"
+                            )
 
                         if not graph_loaded:
                             # Note: Rebuilding graph from metadata is a fallback.
@@ -1302,6 +1315,7 @@ class FastCode:
         Returns:
             True if successful, False otherwise
         """
+
         def invalidate_in_memory_state() -> None:
             self.loaded_repositories = {}
             self.repo_indexed = False
@@ -1345,7 +1359,9 @@ class FastCode:
             if repo_names:
                 repos_to_load = [r for r in available_repos if r in repo_names]
                 if not repos_to_load:
-                    self.logger.error(f"None of the requested repositories found: {repo_names}")
+                    self.logger.error(
+                        f"None of the requested repositories found: {repo_names}"
+                    )
                     invalidate_in_memory_state()
                     return False
                 missing_repos = sorted(set(repo_names) - set(repos_to_load))
@@ -1358,7 +1374,9 @@ class FastCode:
             else:
                 repos_to_load = available_repos
 
-            self.logger.info(f"Found {len(repos_to_load)} repository indexes: {', '.join(repos_to_load)}")
+            self.logger.info(
+                f"Found {len(repos_to_load)} repository indexes: {', '.join(repos_to_load)}"
+            )
 
             # Always reinitialize for clean merge
             previously_loaded = dict(self.loaded_repositories)
@@ -1443,7 +1461,9 @@ class FastCode:
 
                         self.logger.info(f"Loaded BM25 data for {repo_name}")
                     except Exception as e:
-                        self.logger.warning(f"Failed to load BM25 data for {repo_name}: {e}")
+                        self.logger.warning(
+                            f"Failed to load BM25 data for {repo_name}: {e}"
+                        )
                         bm25_cache_complete = False
                 else:
                     self.logger.warning(f"BM25 data not found for {repo_name}")
@@ -1462,7 +1482,9 @@ class FastCode:
                     if fresh_graph_builder.merge_from_file(repo_name):
                         self.logger.info(f"Merged graph data from {repo_name}")
                     else:
-                        self.logger.warning(f"Failed to merge graph data from {repo_name}")
+                        self.logger.warning(
+                            f"Failed to merge graph data from {repo_name}"
+                        )
                         graph_cache_complete = False
 
             # Rebuild FULL BM25 index with merged data (for repository selection)
@@ -1476,14 +1498,20 @@ class FastCode:
             else:
                 # Fallback: reconstruct from metadata
                 if bm25_cache_complete:
-                    self.logger.info("No BM25 data found, reconstructing from metadata...")
+                    self.logger.info(
+                        "No BM25 data found, reconstructing from metadata..."
+                    )
                 else:
-                    self.logger.info("BM25 cache incomplete, reconstructing from metadata...")
+                    self.logger.info(
+                        "BM25 cache incomplete, reconstructing from metadata..."
+                    )
                 elements = self._reconstruct_elements_from_metadata()
 
                 if elements:
                     self.retriever.index_for_bm25(elements)
-                    self.logger.info(f"Rebuilt BM25 index with {len(elements)} elements")
+                    self.logger.info(
+                        f"Rebuilt BM25 index with {len(elements)} elements"
+                    )
                 else:
                     self.logger.warning("No elements reconstructed from metadata")
 
@@ -1646,7 +1674,9 @@ class FastCode:
             "current_lookup": current_lookup,
         }
 
-    def _collect_unchanged_elements(self, manifest, unchanged_files, existing_metadata) -> tuple:
+    def _collect_unchanged_elements(
+        self, manifest, unchanged_files, existing_metadata
+    ) -> tuple:
         """Collect element dicts and IDs for unchanged files from existing metadata."""
         unchanged_element_ids = set()
         for rel_path in unchanged_files:
@@ -1655,7 +1685,8 @@ class FastCode:
                 unchanged_element_ids.add(elem_id)
 
         unchanged_elements = [
-            meta for meta in existing_metadata
+            meta
+            for meta in existing_metadata
             if meta.get("id") in unchanged_element_ids
         ]
 
@@ -1768,23 +1799,25 @@ class FastCode:
         all_elements = []
         for meta in unchanged_elements:
             try:
-                all_elements.append(CodeElement(
-                    id=meta.get("id", ""),
-                    type=meta.get("type", ""),
-                    name=meta.get("name", ""),
-                    file_path=meta.get("file_path", ""),
-                    relative_path=meta.get("relative_path", ""),
-                    language=meta.get("language", ""),
-                    start_line=meta.get("start_line", 0),
-                    end_line=meta.get("end_line", 0),
-                    code=meta.get("code", ""),
-                    signature=meta.get("signature"),
-                    docstring=meta.get("docstring"),
-                    summary=meta.get("summary"),
-                    metadata=meta.get("metadata", {}),
-                    repo_name=meta.get("repo_name"),
-                    repo_url=meta.get("repo_url"),
-                ))
+                all_elements.append(
+                    CodeElement(
+                        id=meta.get("id", ""),
+                        type=meta.get("type", ""),
+                        name=meta.get("name", ""),
+                        file_path=meta.get("file_path", ""),
+                        relative_path=meta.get("relative_path", ""),
+                        language=meta.get("language", ""),
+                        start_line=meta.get("start_line", 0),
+                        end_line=meta.get("end_line", 0),
+                        code=meta.get("code", ""),
+                        signature=meta.get("signature"),
+                        docstring=meta.get("docstring"),
+                        summary=meta.get("summary"),
+                        metadata=meta.get("metadata", {}),
+                        repo_name=meta.get("repo_name"),
+                        repo_url=meta.get("repo_url"),
+                    )
+                )
             except Exception as e:
                 self.logger.warning(f"Failed to reconstruct element: {e}")
         all_elements.extend(new_elements)
@@ -1799,7 +1832,10 @@ class FastCode:
             embedding = elem.metadata.get("embedding")
             if embedding is not None:
                 embedding_array = np.asarray(embedding, dtype=np.float32)
-                if embedding_array.ndim != 1 or embedding_array.shape[0] != current_dimension:
+                if (
+                    embedding_array.ndim != 1
+                    or embedding_array.shape[0] != current_dimension
+                ):
                     self.logger.warning(
                         "Embedding shape mismatch for '%s' element '%s': expected=%s got=%s",
                         repo_name,
@@ -1821,8 +1857,11 @@ class FastCode:
 
         # 9. Rebuild BM25 (temporary retriever)
         temp_retriever = HybridRetriever(
-            self.config, temp_store, self.embedder,
-            CodeGraphBuilder(self.config), repo_root=effective_repo_path,
+            self.config,
+            temp_store,
+            self.embedder,
+            CodeGraphBuilder(self.config),
+            repo_root=effective_repo_path,
         )
         temp_retriever.index_for_bm25(all_elements)
 
@@ -1849,10 +1888,9 @@ class FastCode:
                 repo_overview = overview_generator.generate_overview(
                     effective_repo_path, repo_name, file_structure
                 )
-                repo_url = (
-                    self.loaded_repositories.get(repo_name, {}).get("url")
-                    or self.loaded_repositories.get(repo_name, {}).get("remote_url")
-                )
+                repo_url = self.loaded_repositories.get(repo_name, {}).get(
+                    "url"
+                ) or self.loaded_repositories.get(repo_name, {}).get("remote_url")
                 self.indexer.current_repo_name = repo_name
                 self.indexer.current_repo_url = repo_url
                 self.indexer._save_repository_overview(repo_overview)

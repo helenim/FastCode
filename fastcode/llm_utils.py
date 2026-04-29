@@ -7,7 +7,9 @@ from openai import BadRequestError
 logger = logging.getLogger(__name__)
 
 
-def select_model_for_complexity(config: dict[str, Any], complexity_score: int) -> str | None:
+def select_model_for_complexity(
+    config: dict[str, Any], complexity_score: int
+) -> str | None:
     """Select the appropriate model based on query complexity.
 
     Returns the model name to use, or None to use the default.
@@ -30,7 +32,9 @@ def select_model_for_complexity(config: dict[str, Any], complexity_score: int) -
         if fast_model:
             logger.info(
                 "Routing to fast model '%s' (complexity=%d < threshold=%d)",
-                fast_model, complexity_score, threshold,
+                fast_model,
+                complexity_score,
+                threshold,
             )
             return fast_model
 
@@ -38,7 +42,8 @@ def select_model_for_complexity(config: dict[str, Any], complexity_score: int) -
     if strong_model:
         logger.debug(
             "Routing to strong model '%s' (complexity=%d)",
-            strong_model, complexity_score,
+            strong_model,
+            complexity_score,
         )
     return strong_model
 

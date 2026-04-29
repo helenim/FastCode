@@ -393,9 +393,7 @@ class AgentTools:
             debug_info = {}
             if len(results) == 0:
                 debug_info["files_searched"] = files_searched
-                debug_info["search_root"] = os.path.relpath(
-                    search_root, self.repo_root
-                )
+                debug_info["search_root"] = os.path.relpath(search_root, self.repo_root)
                 if files_searched == 0:
                     debug_info["hint"] = (
                         "No files matched the file_pattern even after auto-retry with recursive pattern"

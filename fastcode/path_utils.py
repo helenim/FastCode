@@ -277,7 +277,9 @@ class PathUtils:
         Uses an os.sep-aware check to prevent prefix-collision attacks
         (e.g. /tmp/repo_evil matching /tmp/repo via startswith).
         """
-        return abs_path == self.repo_root or abs_path.startswith(self.repo_root + os.sep)
+        return abs_path == self.repo_root or abs_path.startswith(
+            self.repo_root + os.sep
+        )
 
     def detect_repo_name_from_path(self, file_path: str, known_repos: set[str]) -> str:
         """

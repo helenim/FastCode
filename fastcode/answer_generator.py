@@ -77,7 +77,7 @@ class AnswerGenerator:
             self._client_initialised = True
             try:
                 self._client = self._initialise_client()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 self.logger.warning(
                     "LLM client construction failed (%s); query endpoints "
                     "will return a structured error until this is resolved.",
@@ -109,9 +109,7 @@ class AnswerGenerator:
                     "function normally."
                 )
                 return None
-            return Anthropic(
-                api_key=self.anthropic_api_key, base_url=self.base_url
-            )
+            return Anthropic(api_key=self.anthropic_api_key, base_url=self.base_url)
 
         self.logger.warning("Unknown provider: %s", self.provider)
         return None

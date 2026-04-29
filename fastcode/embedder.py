@@ -37,7 +37,8 @@ class CodeEmbedder:
             self.embedding_dim = self._matryoshka_dim
             self.logger.info(
                 "Matryoshka truncation enabled: %d → %d dimensions",
-                self._full_dim, self._matryoshka_dim,
+                self._full_dim,
+                self._matryoshka_dim,
             )
         else:
             self.embedding_dim = self._full_dim

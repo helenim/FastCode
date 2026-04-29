@@ -97,8 +97,11 @@ class VectorStoreBackend(Protocol):
 
     # Repo overview management
     def save_repo_overview(
-        self, repo_name: str, overview_content: str,
-        embedding: np.ndarray, metadata: dict[str, Any],
+        self,
+        repo_name: str,
+        overview_content: str,
+        embedding: np.ndarray,
+        metadata: dict[str, Any],
     ) -> None:
         """Save a repository overview."""
         ...
@@ -112,7 +115,9 @@ class VectorStoreBackend(Protocol):
         ...
 
     def search_repository_overviews(
-        self, query_vector: np.ndarray, k: int = 5,
+        self,
+        query_vector: np.ndarray,
+        k: int = 5,
         min_score: float | None = None,
     ) -> list[tuple[dict[str, Any], float]]:
         """Search repository overviews."""

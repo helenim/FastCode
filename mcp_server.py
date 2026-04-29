@@ -227,7 +227,9 @@ def _run_full_reindex(
     return {"status": "success", "count": count}
 
 
-def _ensure_repos_ready(repos: list[str], allow_incremental: bool = True, ctx=None) -> list[str]:
+def _ensure_repos_ready(
+    repos: list[str], allow_incremental: bool = True, ctx=None
+) -> list[str]:
     """
     For each repo source string:
       - If already indexed → skip
@@ -264,7 +266,11 @@ def _ensure_repos_ready(repos: list[str], allow_incremental: bool = True, ctx=No
 
         derived_name = get_repo_name_from_path(source, workspace_root=workspace_root)
         legacy_name = strip_repo_hash_suffix(derived_name)
-        if not legacy_name or resolved_name != legacy_name or resolved_name == derived_name:
+        if (
+            not legacy_name
+            or resolved_name != legacy_name
+            or resolved_name == derived_name
+        ):
             return []
 
         source_path = os.path.abspath(source)
@@ -396,7 +402,9 @@ def _ensure_loaded(fc, ready_names: list[str]) -> bool:
     vector_store = getattr(fc, "vector_store", None)
     if vector_store is not None and hasattr(vector_store, "get_count"):
         if vector_store.get_count() == 0:
-            logger.error("Repository load finished with an empty in-memory vector store")
+            logger.error(
+                "Repository load finished with an empty in-memory vector store"
+            )
             return False
 
     if vector_store is not None and hasattr(vector_store, "get_repository_names"):
@@ -739,7 +747,9 @@ def get_repo_structure(repo_name: str) -> str:
     overviews = fc.vector_store.load_repo_overviews()
     overview = overviews.get(repo_name)
     if not overview:
-        return f"No overview found for repository '{repo_name}'. It may need re-indexing."
+        return (
+            f"No overview found for repository '{repo_name}'. It may need re-indexing."
+        )
 
     metadata = overview.get("metadata", {})
     summary = metadata.get("summary", "No summary available.")
@@ -806,7 +816,9 @@ def get_file_summary(file_path: str, repos: list[str]) -> str:
         fm = files[0]
         parts.append(f"Language: {fm.get('language', '?')}")
         mi = fm.get("metadata", {})
-        parts.append(f"Lines: {mi.get('total_lines', '?')} (code: {mi.get('code_lines', '?')})")
+        parts.append(
+            f"Lines: {mi.get('total_lines', '?')} (code: {mi.get('code_lines', '?')})"
+        )
         num_imports = mi.get("num_imports", 0)
         if num_imports:
             parts.append(f"Imports: {num_imports}")
@@ -823,7 +835,9 @@ def get_file_summary(file_path: str, repos: list[str]) -> str:
                 parts.append(f"      .{m}")
 
     if functions:
-        top_level = [f for f in functions if not f.get("metadata", {}).get("class_name")]
+        top_level = [
+            f for f in functions if not f.get("metadata", {}).get("class_name")
+        ]
         if top_level:
             parts.append(f"\nFunctions ({len(top_level)}):")
             for fn in top_level:
@@ -834,14 +848,24 @@ def get_file_summary(file_path: str, repos: list[str]) -> str:
     return "\n".join(parts)
 
 
-def _walk_call_chain(gb, element_id: str, direction: str, hops_left: int,
-                     parts: list, indent: int = 2, visited: set | None = None):
+def _walk_call_chain(
+    gb,
+    element_id: str,
+    direction: str,
+    hops_left: int,
+    parts: list,
+    indent: int = 2,
+    visited: set | None = None,
+):
     """Recursively walk the call chain and format output."""
     if visited is None:
         visited = {element_id}
 
-    neighbors = (gb.get_callers(element_id) if direction == "callers"
-                 else gb.get_callees(element_id))
+    neighbors = (
+        gb.get_callers(element_id)
+        if direction == "callers"
+        else gb.get_callees(element_id)
+    )
 
     if not neighbors:
         parts.append(f"{'  ' * indent}(none)")
@@ -853,10 +877,14 @@ def _walk_call_chain(gb, element_id: str, direction: str, hops_left: int,
         visited.add(nid)
         elem = gb.element_by_id.get(nid)
         if elem:
-            loc = f"{elem.relative_path}:L{elem.start_line}" if elem.relative_path else ""
+            loc = (
+                f"{elem.relative_path}:L{elem.start_line}" if elem.relative_path else ""
+            )
             parts.append(f"{'  ' * indent}- {elem.name} [{loc}]")
             if hops_left > 1:
-                _walk_call_chain(gb, nid, direction, hops_left - 1, parts, indent + 1, visited)
+                _walk_call_chain(
+                    gb, nid, direction, hops_left - 1, parts, indent + 1, visited
+                )
 
 
 @mcp.tool()

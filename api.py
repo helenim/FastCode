@@ -325,9 +325,7 @@ async def load_and_index(body: LoadRepositoryRequest, force: bool = False):
 
     try:
         logger.info(f"Loading repository: {body.source}")
-        await asyncio.to_thread(
-            fastcode.load_repository, body.source, body.is_url
-        )
+        await asyncio.to_thread(fastcode.load_repository, body.source, body.is_url)
 
         logger.info("Indexing repository")
         await asyncio.to_thread(fastcode.index_repository, force=force)
@@ -384,9 +382,7 @@ async def index_multiple(body: IndexMultipleRequest):
 
     try:
         logger.info(f"Indexing {len(body.sources)} repositories")
-        fastcode.load_multiple_repositories(
-            [s.model_dump() for s in body.sources]
-        )
+        fastcode.load_multiple_repositories([s.model_dump() for s in body.sources])
 
         fastcode.vector_store.invalidate_scan_cache()
 

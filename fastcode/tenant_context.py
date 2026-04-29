@@ -33,8 +33,9 @@ import contextlib
 import os
 import re
 import threading
+from collections.abc import Iterator
 from contextvars import ContextVar
-from typing import Any, Iterator
+from typing import Any
 
 DEFAULT_TENANT_ID = "_default"
 TENANT_ENV = "EBRIDGE_TENANT_ID"
@@ -126,6 +127,7 @@ def _normalize(value: str) -> str:
 # asyncio contexts but NOT across threads created with raw `threading.Thread`.
 # We expose a tiny helper that captures the current tenant and re-binds it
 # inside the worker — callers can opt in via `Thread(target=run_with_tenant)`.
+
 
 def run_with_tenant(target, /, *args, **kwargs):
     """Run ``target(*args, **kwargs)`` in a worker thread with the same

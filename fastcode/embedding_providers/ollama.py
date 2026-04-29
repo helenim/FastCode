@@ -23,6 +23,7 @@ def _get_httpx():
     global _httpx
     if _httpx is None:
         import httpx
+
         _httpx = httpx
     return _httpx
 
@@ -54,7 +55,8 @@ class OllamaProvider:
         # Probe dimension by embedding a short test string
         logger.info(
             "Initializing Ollama embedding provider: model=%s url=%s",
-            self._model_name, self._base_url,
+            self._model_name,
+            self._base_url,
         )
         probe = self._call_embed(["test"])
         self._embedding_dim: int = probe.shape[1]

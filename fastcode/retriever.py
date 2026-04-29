@@ -974,8 +974,12 @@ class HybridRetriever:
         fusion_method = self.retrieval_config.get("fusion_method", "rrf")
 
         if fusion_method == "rrf":
-            return self._rrf_combine(semantic_results, keyword_results, pseudocode_results)
-        return self._weighted_linear_combine(semantic_results, keyword_results, pseudocode_results)
+            return self._rrf_combine(
+                semantic_results, keyword_results, pseudocode_results
+            )
+        return self._weighted_linear_combine(
+            semantic_results, keyword_results, pseudocode_results
+        )
 
     def _rrf_combine(
         self,

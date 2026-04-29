@@ -27,15 +27,20 @@ def create_vector_store(config: dict[str, Any]):
 
     if backend_type == "faiss":
         from .faiss_store import FaissVectorStore
+
         logger.info("Creating FAISS vector store backend")
         return FaissVectorStore(config)
 
     elif backend_type == "qdrant":
         from .qdrant_store import QdrantVectorStore
+
         logger.info("Creating Qdrant vector store backend")
         return QdrantVectorStore(config)
 
     else:
-        logger.warning("Unknown vector store type: %s, falling back to FAISS", backend_type)
+        logger.warning(
+            "Unknown vector store type: %s, falling back to FAISS", backend_type
+        )
         from .faiss_store import FaissVectorStore
+
         return FaissVectorStore(config)

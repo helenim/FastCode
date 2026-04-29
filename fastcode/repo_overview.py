@@ -400,9 +400,7 @@ Summary:"""
 
         # Top-level directories
         directories = file_structure.get("directories", {})
-        top_dirs = [
-            d for d in directories if os.sep not in d or d.count(os.sep) == 0
-        ]
+        top_dirs = [d for d in directories if os.sep not in d or d.count(os.sep) == 0]
         if top_dirs:
             lines.append("\nTop-Level Directories:")
             for td in sorted(top_dirs)[:15]:  # Limit to 15

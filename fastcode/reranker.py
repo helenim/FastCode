@@ -56,7 +56,12 @@ class TypeWeightReranker:
             elem_type = result["element"].get("type", "")
             weight = self._weights.get(elem_type, 1.0)
             result["total_score"] *= weight
-            for key in ("semantic_score", "keyword_score", "pseudocode_score", "graph_score"):
+            for key in (
+                "semantic_score",
+                "keyword_score",
+                "pseudocode_score",
+                "graph_score",
+            ):
                 if key in result:
                     result[key] *= weight
 
@@ -97,7 +102,9 @@ class CrossEncoderReranker:
         else:
             device = self._device
 
-        logger.info("Loading cross-encoder model: %s (device=%s)", self._model_name, device)
+        logger.info(
+            "Loading cross-encoder model: %s (device=%s)", self._model_name, device
+        )
         self._model = CrossEncoder(self._model_name, device=device)
 
     def rerank(
@@ -147,7 +154,9 @@ def create_reranker(config: dict[str, Any]) -> Reranker:
         )
         return CrossEncoderReranker(model_name=model)
     else:
-        logger.warning("Unknown reranker type: %s, falling back to type_weight", reranker_type)
+        logger.warning(
+            "Unknown reranker type: %s, falling back to type_weight", reranker_type
+        )
         return TypeWeightReranker()
 
 

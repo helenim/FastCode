@@ -352,9 +352,9 @@ def get_repo_name_from_path(path: str, workspace_root: str | None = None) -> str
         ):
             return base_name
 
-    digest = hashlib.md5(
-        normalized.encode("utf-8"), usedforsecurity=False
-    ).hexdigest()[:8]
+    digest = hashlib.md5(normalized.encode("utf-8"), usedforsecurity=False).hexdigest()[
+        :8
+    ]
     return f"{base_name}-{digest}"
 
 
@@ -378,8 +378,9 @@ def clean_docstring(docstring: str) -> str:
             min_indent = min(min_indent, indent)
 
     # Remove common indentation
-    if min_indent < float('inf'):
-        lines = [line[min_indent:] if len(line) > min_indent else line
-                 for line in lines]
+    if min_indent < float("inf"):
+        lines = [
+            line[min_indent:] if len(line) > min_indent else line for line in lines
+        ]
 
     return "\n".join(lines).strip()

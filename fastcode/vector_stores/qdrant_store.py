@@ -41,7 +41,9 @@ class QdrantVectorStore:
         qdrant_cfg = self.vector_config.get("qdrant", {})
 
         self.dimension: int | None = None
-        self.metadata: list[dict[str, Any]] = []  # Compatibility — may be empty for Qdrant
+        self.metadata: list[
+            dict[str, Any]
+        ] = []  # Compatibility — may be empty for Qdrant
 
         self._url: str = qdrant_cfg.get(
             "url", os.getenv("QDRANT_URL", "http://localhost:6333")
@@ -61,7 +63,9 @@ class QdrantVectorStore:
 
         self._client = None
         self._index_scan_cache: tuple[float, list[dict[str, Any]]] | None = None
-        self._index_scan_cache_ttl = self.vector_config.get("index_scan_cache_ttl", 30.0)
+        self._index_scan_cache_ttl = self.vector_config.get(
+            "index_scan_cache_ttl", 30.0
+        )
 
     def _get_client(self):
         if self._client is None:
@@ -104,7 +108,9 @@ class QdrantVectorStore:
                     field_schema=models.PayloadSchemaType.KEYWORD,
                 )
             logger.info(
-                "Created Qdrant collection '%s' (dim=%d)", self._collection_name, dimension
+                "Created Qdrant collection '%s' (dim=%d)",
+                self._collection_name,
+                dimension,
             )
         else:
             logger.info("Qdrant collection '%s' already exists", self._collection_name)
@@ -124,7 +130,9 @@ class QdrantVectorStore:
             point_id = meta.get("id") or str(uuid.uuid4())
             points.append(
                 models.PointStruct(
-                    id=point_id if isinstance(point_id, str) and len(point_id) <= 36 else str(uuid.uuid4()),
+                    id=point_id
+                    if isinstance(point_id, str) and len(point_id) <= 36
+                    else str(uuid.uuid4()),
                     vector=vec.tolist(),
                     payload=meta,
                 )
@@ -139,7 +147,11 @@ class QdrantVectorStore:
                 points=batch,
             )
 
-        logger.info("Added %d vectors to Qdrant collection '%s'", len(vectors), self._collection_name)
+        logger.info(
+            "Added %d vectors to Qdrant collection '%s'",
+            len(vectors),
+            self._collection_name,
+        )
 
     def search(
         self,
@@ -213,7 +225,8 @@ class QdrantVectorStore:
             )
             logger.info(
                 "Loaded Qdrant collection '%s' with %d points",
-                self._collection_name, count,
+                self._collection_name,
+                count,
             )
             return count > 0
         except Exception as e:
@@ -250,7 +263,11 @@ class QdrantVectorStore:
                 with_payload=["repo_name"],
                 with_vectors=False,
             )
-            names = {r.payload.get("repo_name") for r in results if r.payload.get("repo_name")}
+            names = {
+                r.payload.get("repo_name")
+                for r in results
+                if r.payload.get("repo_name")
+            }
             return sorted(names)
         except Exception:
             return []
@@ -284,7 +301,9 @@ class QdrantVectorStore:
 
     def delete_by_filter(self, filter_func: Any) -> int:
         # For Qdrant, prefer delete_by_repo or native filter-based deletion
-        logger.warning("delete_by_filter with callable not supported for Qdrant; use delete_by_repo")
+        logger.warning(
+            "delete_by_filter with callable not supported for Qdrant; use delete_by_repo"
+        )
         return 0
 
     def delete_by_repo(self, repo_name: str) -> int:
@@ -351,7 +370,9 @@ class QdrantVectorStore:
                     )
                 ),
             )
-            logger.info("Deleted vectors for %d files in repo '%s'", len(file_paths), repo_name)
+            logger.info(
+                "Deleted vectors for %d files in repo '%s'", len(file_paths), repo_name
+            )
             return len(file_paths)  # Approximate
         except Exception as e:
             logger.error("Failed to delete file vectors: %s", e)
@@ -391,8 +412,11 @@ class QdrantVectorStore:
     # -- Repo overview management --
 
     def save_repo_overview(
-        self, repo_name: str, overview_content: str,
-        embedding: np.ndarray, metadata: dict[str, Any],
+        self,
+        repo_name: str,
+        overview_content: str,
+        embedding: np.ndarray,
+        metadata: dict[str, Any],
     ) -> None:
         client = self._get_client()
         _, models = _import_qdrant()
@@ -457,7 +481,8 @@ class QdrantVectorStore:
                     "content": point.payload.get("content", ""),
                     "embedding": np.array(point.vector, dtype=np.float32),
                     "metadata": {
-                        k: v for k, v in point.payload.items()
+                        k: v
+                        for k, v in point.payload.items()
                         if k not in ("repo_name", "content")
                     },
                 }
@@ -466,7 +491,9 @@ class QdrantVectorStore:
             return {}
 
     def search_repository_overviews(
-        self, query_vector: np.ndarray, k: int = 5,
+        self,
+        query_vector: np.ndarray,
+        k: int = 5,
         min_score: float | None = None,
     ) -> list[tuple[dict[str, Any], float]]:
         try:
@@ -482,7 +509,11 @@ class QdrantVectorStore:
 
             return [
                 (
-                    {"repo_name": hit.payload.get("repo_name"), "type": "repository_overview", **hit.payload},
+                    {
+                        "repo_name": hit.payload.get("repo_name"),
+                        "type": "repository_overview",
+                        **hit.payload,
+                    },
                     hit.score,
                 )
                 for hit in results

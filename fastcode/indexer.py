@@ -195,7 +195,9 @@ class CodeIndexer:
         elements_with_embeddings = self.embedder.embed_code_elements(element_dicts)
 
         # Update elements with embeddings
-        for elem, elem_dict in zip(self.elements, elements_with_embeddings, strict=False):
+        for elem, elem_dict in zip(
+            self.elements, elements_with_embeddings, strict=False
+        ):
             elem.metadata["embedding"] = elem_dict.get("embedding")
             elem.metadata["embedding_text"] = elem_dict.get("embedding_text")
 
@@ -205,8 +207,9 @@ class CodeIndexer:
 
         return self.elements
 
-    def index_files(self, file_infos: list[dict], repo_name: str,
-                    repo_url: str | None = None) -> list[CodeElement]:
+    def index_files(
+        self, file_infos: list[dict], repo_name: str, repo_url: str | None = None
+    ) -> list[CodeElement]:
         """Index specific files only (for incremental reindexing).
 
         Reuses existing _index_file() and embedding pipeline.
@@ -237,21 +240,26 @@ class CodeIndexer:
 
             self._index_file(file_info, content, parse_result)
 
-        self.logger.info(f"Parsed {len(self.elements)} elements from {len(file_infos)} changed files")
+        self.logger.info(
+            f"Parsed {len(self.elements)} elements from {len(file_infos)} changed files"
+        )
 
         # Generate embeddings for new elements only
         if self.elements:
             element_dicts = [elem.to_dict() for elem in self.elements]
             elements_with_embeddings = self.embedder.embed_code_elements(element_dicts)
 
-            for elem, elem_dict in zip(self.elements, elements_with_embeddings, strict=False):
+            for elem, elem_dict in zip(
+                self.elements, elements_with_embeddings, strict=False
+            ):
                 elem.metadata["embedding"] = elem_dict.get("embedding")
                 elem.metadata["embedding_text"] = elem_dict.get("embedding_text")
 
         return self.elements
 
-    def _index_file(self, file_info: dict[str, Any], content: str,
-                    parse_result: FileParseResult):
+    def _index_file(
+        self, file_info: dict[str, Any], content: str, parse_result: FileParseResult
+    ):
         """Index a single file at multiple levels"""
         file_path = file_info["path"]
         relative_path = file_info["relative_path"]

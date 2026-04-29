@@ -34,8 +34,12 @@ class CodeGraphBuilder:
             "build_inheritance_graph", True
         )
         self.build_tests_graph = self.graph_config.get("build_tests_graph", True)
-        self.build_co_change_graph = self.graph_config.get("build_co_change_graph", True)
-        self.build_type_usage_graph = self.graph_config.get("build_type_usage_graph", True)
+        self.build_co_change_graph = self.graph_config.get(
+            "build_co_change_graph", True
+        )
+        self.build_type_usage_graph = self.graph_config.get(
+            "build_type_usage_graph", True
+        )
         self.community_detection = self.graph_config.get("community_detection", True)
         self.blast_radius_hops = self.graph_config.get("blast_radius_hops", 2)
         self.max_depth = self.graph_config.get("max_depth", 5)
@@ -51,9 +55,13 @@ class CodeGraphBuilder:
         self.call_graph = nx.DiGraph()
         self.dependency_graph = nx.DiGraph()
         self.inheritance_graph = nx.DiGraph()
-        self.tests_graph = nx.DiGraph()       # TESTS edges: test -> tested target
-        self.co_change_graph = nx.Graph()      # FILE_CHANGES_WITH edges (undirected, weighted)
-        self.type_usage_graph = nx.DiGraph()   # USES_TYPE edges: function -> type reference
+        self.tests_graph = nx.DiGraph()  # TESTS edges: test -> tested target
+        self.co_change_graph = (
+            nx.Graph()
+        )  # FILE_CHANGES_WITH edges (undirected, weighted)
+        self.type_usage_graph = (
+            nx.DiGraph()
+        )  # USES_TYPE edges: function -> type reference
 
         # Maps for quick lookup
         self.element_by_name: dict[str, CodeElement] = {}
@@ -588,9 +596,13 @@ class CodeGraphBuilder:
                     imported_names = imp.get("names", [])
                     if isinstance(imported_names, list):
                         for imp_name in imported_names:
-                            if isinstance(imp_name, str) and imp_name in targets_by_name:
+                            if (
+                                isinstance(imp_name, str)
+                                and imp_name in targets_by_name
+                            ):
                                 self.tests_graph.add_edge(
-                                    test_elem.id, targets_by_name[imp_name],
+                                    test_elem.id,
+                                    targets_by_name[imp_name],
                                     edge_type="TESTS",
                                 )
 
@@ -623,6 +635,7 @@ class CodeGraphBuilder:
 
             # Count co-occurrences of file pairs across commits
             from collections import Counter
+
             pair_counts: Counter[tuple[str, str]] = Counter()
 
             for commit in commits:
@@ -636,7 +649,7 @@ class CodeGraphBuilder:
 
                 # Count all pairs of changed files
                 for i, f1 in enumerate(changed_files):
-                    for f2 in changed_files[i + 1:]:
+                    for f2 in changed_files[i + 1 :]:
                         pair = tuple(sorted([f1, f2]))
                         pair_counts[pair] += 1
 
@@ -681,8 +694,9 @@ class CodeGraphBuilder:
 
             # Simple extraction: find capitalized words that match known types
             import re
+
             # Match type annotation patterns: ": TypeName", "-> TypeName", "list[TypeName]"
-            type_refs = set(re.findall(r'\b([A-Z][a-zA-Z0-9_]+)\b', signature))
+            type_refs = set(re.findall(r"\b([A-Z][a-zA-Z0-9_]+)\b", signature))
 
             for type_name in type_refs:
                 if type_name in type_ids:
@@ -713,8 +727,13 @@ class CodeGraphBuilder:
 
         # Merge all directed graphs into a single undirected graph for community detection
         combined = nx.Graph()
-        for graph in [self.call_graph, self.dependency_graph, self.inheritance_graph,
-                      self.tests_graph, self.type_usage_graph]:
+        for graph in [
+            self.call_graph,
+            self.dependency_graph,
+            self.inheritance_graph,
+            self.tests_graph,
+            self.type_usage_graph,
+        ]:
             for u, v in graph.edges():
                 combined.add_edge(u, v)
         # Add co-change edges (already undirected)
@@ -722,7 +741,9 @@ class CodeGraphBuilder:
             combined.add_edge(u, v, weight=data.get("weight", 1))
 
         if combined.number_of_nodes() < 3:
-            self.logger.info("Too few nodes for community detection (%d)", combined.number_of_nodes())
+            self.logger.info(
+                "Too few nodes for community detection (%d)", combined.number_of_nodes()
+            )
             return {}
 
         try:
@@ -749,11 +770,14 @@ class CodeGraphBuilder:
 
         self.logger.info(
             "Detected %d communities across %d nodes (Louvain)",
-            len(communities_list), combined.number_of_nodes(),
+            len(communities_list),
+            combined.number_of_nodes(),
         )
         return self.communities
 
-    def blast_radius(self, node_id: str, max_hops: int | None = None) -> dict[str, float]:
+    def blast_radius(
+        self, node_id: str, max_hops: int | None = None
+    ) -> dict[str, float]:
         """Compute the blast radius of a node: all reachable nodes within N hops,
         weighted by edge type importance.
 
@@ -771,18 +795,18 @@ class CodeGraphBuilder:
 
         # Edge type weights (how much a change propagates through each edge type)
         edge_weights = {
-            "call": 1.0,         # Callers are directly affected
-            "dependency": 0.8,   # Importers are affected
+            "call": 1.0,  # Callers are directly affected
+            "dependency": 0.8,  # Importers are affected
             "inheritance": 0.9,  # Subclasses are affected
-            "tests": 0.7,       # Tests need updating
+            "tests": 0.7,  # Tests need updating
             "type_usage": 0.5,  # Type users may need updating
-            "co_change": 0.4,   # Historically co-changed files
+            "co_change": 0.4,  # Historically co-changed files
         }
 
         reachable: dict[str, float] = {}
 
         graph_configs = [
-            (self.call_graph, "call", True),         # directed: check both directions
+            (self.call_graph, "call", True),  # directed: check both directions
             (self.dependency_graph, "dependency", True),
             (self.inheritance_graph, "inheritance", True),
             (self.tests_graph, "tests", True),

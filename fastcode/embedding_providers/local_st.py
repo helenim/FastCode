@@ -49,7 +49,11 @@ class LocalSTProvider:
             )
         self._device = device
 
-        logger.info("Loading local embedding model: %s (device=%s)", self._model_name, self._device)
+        logger.info(
+            "Loading local embedding model: %s (device=%s)",
+            self._model_name,
+            self._device,
+        )
         self._model = SentenceTransformer(self._model_name, device=self._device)
         self._model.max_seq_length = self._max_seq_length
         self._embedding_dim: int = self._model.get_sentence_embedding_dimension()

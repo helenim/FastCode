@@ -16,6 +16,15 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
 
+# Install ebridge-shared (provides ebridge_auth.KeycloakAuth used by api.py).
+# The `shared` build context is wired in compose via:
+#     additional_contexts:
+#       shared: ./shared
+# When building outside compose, pass it via:
+#     docker build --build-context shared=../shared .
+COPY --from=shared / /tmp/shared/
+RUN pip install --no-cache-dir --no-deps /tmp/shared/ && rm -rf /tmp/shared/
+
 # Pre-download the embedding model BEFORE copying app code
 # so that code changes don't invalidate this ~470MB cached layer
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"

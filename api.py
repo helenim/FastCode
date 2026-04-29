@@ -274,13 +274,13 @@ async def list_repositories(full_scan: bool = False):
 
 
 @app.post("/load", dependencies=_auth_dependencies)
-async def load_repository(request: LoadRepositoryRequest):
+async def load_repository(body: LoadRepositoryRequest):
     """Load a repository"""
     fastcode = _ensure_fastcode_initialized()
 
     try:
-        logger.info(f"Loading repository: {request.source}")
-        fastcode.load_repository(request.source, request.is_url)
+        logger.info(f"Loading repository: {body.source}")
+        fastcode.load_repository(body.source, body.is_url)
 
         return {
             "status": "success",
@@ -319,14 +319,14 @@ async def index_repository(force: bool = False):
 
 
 @app.post("/load-and-index", dependencies=_auth_dependencies)
-async def load_and_index(request: LoadRepositoryRequest, force: bool = False):
+async def load_and_index(body: LoadRepositoryRequest, force: bool = False):
     """Load and index repository in one call"""
     fastcode = _ensure_fastcode_initialized()
 
     try:
-        logger.info(f"Loading repository: {request.source}")
+        logger.info(f"Loading repository: {body.source}")
         await asyncio.to_thread(
-            fastcode.load_repository, request.source, request.is_url
+            fastcode.load_repository, body.source, body.is_url
         )
 
         logger.info("Indexing repository")
@@ -346,16 +346,16 @@ async def load_and_index(request: LoadRepositoryRequest, force: bool = False):
 
 
 @app.post("/load-repositories", dependencies=_auth_dependencies)
-async def load_repositories(request: LoadRepositoriesRequest):
+async def load_repositories(body: LoadRepositoriesRequest):
     """Load existing indexed repositories from cache"""
     fastcode = _ensure_fastcode_initialized()
 
-    if not request.repo_names:
+    if not body.repo_names:
         raise HTTPException(status_code=400, detail="No repository names provided")
 
     try:
-        logger.info(f"Loading repositories from cache: {request.repo_names}")
-        success = fastcode._load_multi_repo_cache(repo_names=request.repo_names)
+        logger.info(f"Loading repositories from cache: {body.repo_names}")
+        success = fastcode._load_multi_repo_cache(repo_names=body.repo_names)
 
         if not success:
             raise HTTPException(
@@ -375,17 +375,17 @@ async def load_repositories(request: LoadRepositoriesRequest):
 
 
 @app.post("/index-multiple", dependencies=_auth_dependencies)
-async def index_multiple(request: IndexMultipleRequest):
+async def index_multiple(body: IndexMultipleRequest):
     """Load and index multiple repositories"""
     fastcode = _ensure_fastcode_initialized()
 
-    if not request.sources:
+    if not body.sources:
         raise HTTPException(status_code=400, detail="No repositories provided")
 
     try:
-        logger.info(f"Indexing {len(request.sources)} repositories")
+        logger.info(f"Indexing {len(body.sources)} repositories")
         fastcode.load_multiple_repositories(
-            [s.model_dump() for s in request.sources]
+            [s.model_dump() for s in body.sources]
         )
 
         fastcode.vector_store.invalidate_scan_cache()
@@ -511,7 +511,7 @@ async def upload_and_index(file: UploadFile = File(...), force: bool = False):
 
 
 @app.post("/query", response_model=QueryResponse, dependencies=_auth_dependencies)
-async def query_repository(request: QueryRequest):
+async def query_repository(body: QueryRequest):
     """Query the repository"""
     fastcode = _ensure_fastcode_initialized()
 
@@ -519,20 +519,20 @@ async def query_repository(request: QueryRequest):
         raise HTTPException(status_code=400, detail="Repository not indexed")
 
     try:
-        session_id = request.session_id or str(uuid.uuid4())[:8]
-        if request.multi_turn and not request.session_id:
+        session_id = body.session_id or str(uuid.uuid4())[:8]
+        if body.multi_turn and not body.session_id:
             logger.info(f"Generated new multi-turn session: {session_id}")
-        elif not request.session_id:
+        elif not body.session_id:
             logger.info(f"Generated session for single-turn request: {session_id}")
 
-        logger.info(f"Processing query: {request.question}")
+        logger.info(f"Processing query: {body.question}")
         result = await asyncio.to_thread(
             fastcode.query,
-            request.question,
-            request.filters,
-            repo_filter=request.repo_filter,
+            body.question,
+            body.filters,
+            repo_filter=body.repo_filter,
             session_id=session_id,
-            enable_multi_turn=request.multi_turn,
+            enable_multi_turn=body.multi_turn,
         )
 
         prompt_tokens = result.get("prompt_tokens")
@@ -562,30 +562,30 @@ async def query_repository(request: QueryRequest):
 
 
 @app.post("/query-stream", dependencies=_auth_dependencies)
-async def query_repository_stream(request: QueryRequest):
+async def query_repository_stream(body: QueryRequest):
     """Query the repository with streaming response (SSE)"""
     fastcode = _ensure_fastcode_initialized()
 
     if not fastcode.repo_indexed:
         raise HTTPException(status_code=400, detail="Repository not indexed")
 
-    session_id = request.session_id or str(uuid.uuid4())[:8]
-    if request.multi_turn and not request.session_id:
+    session_id = body.session_id or str(uuid.uuid4())[:8]
+    if body.multi_turn and not body.session_id:
         logger.info(f"Generated new multi-turn session: {session_id}")
-    elif not request.session_id:
+    elif not body.session_id:
         logger.info(f"Generated session for single-turn request: {session_id}")
 
-    logger.info(f"Processing streaming query: {request.question}")
+    logger.info(f"Processing streaming query: {body.question}")
 
     async def event_generator():
         """Generate SSE events from query_stream"""
         try:
             for chunk, metadata in fastcode.query_stream(
-                request.question,
-                request.filters,
-                repo_filter=request.repo_filter,
+                body.question,
+                body.filters,
+                repo_filter=body.repo_filter,
                 session_id=session_id,
-                enable_multi_turn=request.multi_turn,
+                enable_multi_turn=body.multi_turn,
             ):
                 if metadata:
                     status = metadata.get("status", "")
